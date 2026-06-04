@@ -31,6 +31,58 @@
     overflow-x: hidden;
   }
 
+  /* USER SELECT */
+  #user-select-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    background: var(--bg);
+  }
+  .user-select-inner { text-align: center; }
+  .user-select-title {
+    font-size: 36px; font-weight: 900; letter-spacing: 0.05em;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .user-select-title span { color: var(--norte); }
+  .user-select-sub {
+    font-size: 20px; color: var(--muted); margin-bottom: 48px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .user-buttons { display: flex; gap: 20px; justify-content: center; }
+  .user-btn {
+    padding: 24px 56px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px; font-weight: 900;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text); border-radius: 12px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .user-btn:hover {
+    border-color: var(--norte); color: var(--norte);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(232,66,10,0.2);
+  }
+
+  /* HEADER RIGHT */
+  .header-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .motivational {
+    font-size: 13px; font-style: italic; color: var(--muted);
+    max-width: 280px; text-align: right; line-height: 1.3;
+  }
+  .switch-user-btn {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .switch-user-btn:hover { border-color: var(--text); color: var(--text); }
+
   /* HEADER */
   header {
     display: flex;
@@ -218,6 +270,12 @@
     border: 1px solid var(--border); flex: 0 0 auto; padding: 14px 20px;
   }
   .btn-skip:hover { color: var(--text); border-color: var(--muted); }
+  .btn-back {
+    background: var(--surface2); color: var(--muted);
+    border: 1px solid var(--border); flex: 0 0 auto; padding: 14px 20px;
+  }
+  .btn-back:hover { color: var(--text); border-color: var(--muted); }
+  .btn-back:disabled { opacity: 0.2; cursor: default; pointer-events: none; }
 
   /* FEEDBACK */
   .feedback-bar {
@@ -328,11 +386,24 @@
 </head>
 <body>
 
+<!-- USER SELECT SCREEN -->
+<div id="user-select-screen">
+  <div class="user-select-inner">
+    <div class="user-select-title">Quiz <span>Calles</span> VLC</div>
+    <div class="user-select-sub">¿Quién eres?</div>
+    <div class="user-buttons">
+      <button class="user-btn" data-user="Josep">Josep</button>
+      <button class="user-btn" data-user="Tudón">Tudón</button>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
 <header>
   <h1>Quiz <span>Calles</span> VLC</h1>
-  <div class="header-stats">
-    <div class="stat-pill ok" id="hdr-ok">✓ 0</div>
-    <div class="stat-pill fail" id="hdr-fail">✗ 0</div>
+  <div class="header-right">
+    <div class="motivational" id="motivational-phrase"></div>
+    <button class="switch-user-btn" id="switch-user-btn"></button>
   </div>
 </header>
 
@@ -395,6 +466,7 @@
       </div>
 
       <div class="btn-row">
+        <button class="btn btn-back" id="btn-back">← Atrás</button>
         <button class="btn btn-primary" id="btn-check">Comprobar</button>
         <button class="btn btn-skip" id="btn-next">Siguiente →</button>
       </div>
@@ -1152,18 +1224,21 @@ const ALL_ENTRIES = parseData(RAW);
 // ============================================================
 // STORAGE
 // ============================================================
-const LS_KEY = 'quiz_calles_vlc_v2';
+let CURRENT_USER = '';
+const LS_KEY_PREFIX = 'quiz_calles_vlc_v2_';
+
+function getLSKey() { return LS_KEY_PREFIX + CURRENT_USER; }
 
 function loadStorage() {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY)) || {};
+    return JSON.parse(localStorage.getItem(getLSKey())) || {};
   } catch { return {}; }
 }
 function saveStorage(data) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
+  try { localStorage.setItem(getLSKey(), JSON.stringify(data)); } catch {}
 }
 
-let store = loadStorage();
+let store = {};
 // store = { [calle]: { ok: N, fail: N, nota: '' }, ... }
 
 function getRecord(calle) {
@@ -1299,6 +1374,7 @@ function renderQuestion() {
 
   // Progress
   document.getElementById('progress-label').textContent = `${qIndex + 1} / ${queue.length}`;
+  document.getElementById('btn-back').disabled = qIndex === 0;
   document.getElementById('progress-fill').style.width = `${(qIndex / queue.length) * 100}%`;
 
   document.getElementById('btn-check').textContent = 'Comprobar';
@@ -1400,8 +1476,7 @@ function showCompleted() {
 }
 
 function updateHeaderStats() {
-  document.getElementById('hdr-ok').textContent = `✓ ${sessionOk}`;
-  document.getElementById('hdr-fail').textContent = `✗ ${sessionFail}`;
+  // stats pills removed
 }
 
 // ============================================================
@@ -1469,6 +1544,21 @@ document.getElementById('btn-check').addEventListener('click', () => {
   else checkAnswer();
 });
 
+document.getElementById('btn-back').addEventListener('click', () => {
+  if (qIndex === 0) return;
+  // save nota of current before going back
+  if (qIndex < queue.length) {
+    const e = queue[qIndex];
+    const rec = getRecord(e.calle);
+    rec.nota = document.getElementById('nota-textarea').value;
+    saveRecord(e.calle, rec);
+  }
+  qIndex--;
+  answered = false;
+  document.getElementById('feedback-bar').classList.remove('show');
+  renderQuestion();
+});
+
 document.getElementById('btn-next').addEventListener('click', () => {
   if (!answered) {
     // skip: count as no answer, just advance
@@ -1513,9 +1603,77 @@ document.addEventListener('keydown', e => {
 });
 
 // ============================================================
+// MOTIVATIONAL PHRASES
+// ============================================================
+const PHRASES = [
+  "El que madruga, Dios le ayuda.",
+  "Cada calle aprendida es un paso más cerca del uniforme.",
+  "La constancia vence lo que la dicha no alcanza.",
+  "Hoy entrenas la mente, mañana salvas vidas.",
+  "No busques el camino fácil, busca el tuyo.",
+  "Un bombero no nace, se forja.",
+  "El esfuerzo de hoy es el orgullo de mañana.",
+  "Conoce tu ciudad como la palma de tu mano.",
+  "Cada fallo es una lección disfrazada.",
+  "La preparación distingue al héroe del valiente.",
+  "Más vale sudar en el estudio que en la emergencia.",
+  "La ciudad te espera, conócela.",
+  "Disciplina es elegir entre lo que quieres ahora y lo que más quieres.",
+  "Ni una calle sin aprender.",
+  "La excelencia no es un acto, es un hábito.",
+  "El mapa de Valencia está en tu cabeza.",
+  "Cada día más cerca. Sigue.",
+  "Los que se rinden nunca ganan. Tú no te rindes.",
+  "Estudia como si tu vida dependiera de ello. La de otros sí depende.",
+  "Conocer es poder. Aprende cada calle.",
+  "El camino es largo pero el destino vale todo.",
+  "Hoy una calle más, mañana una vida más.",
+  "La preparación es la mejor póliza de vida.",
+  "Confía en el proceso. Los resultados llegarán.",
+  "Roma no se construyó en un día, pero se construyó cada día.",
+  "Tu sacrificio de hoy, tu orgullo de mañana.",
+  "El bombero que más sabe es el que más practica.",
+  "Trabaja en silencio, que el éxito haga el ruido.",
+  "Cada repetición te acerca a la maestría.",
+  "No pares. Los mejores nunca paran.",
+  "Valencia entera, calle por calle.",
+  "El conocimiento es el mejor equipo de protección."
+];
+
+function getDailyPhrase() {
+  const day = Math.floor(Date.now() / 86400000);
+  return PHRASES[day % PHRASES.length];
+}
+
+// ============================================================
+// USER MANAGEMENT
+// ============================================================
+function enterApp(user) {
+  CURRENT_USER = user;
+  store = loadStorage();
+  document.getElementById('user-select-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('switch-user-btn').textContent = '↩ ' + user;
+  document.getElementById('motivational-phrase').textContent = getDailyPhrase();
+  startQuiz('todas');
+}
+
+document.querySelectorAll('.user-btn').forEach(btn => {
+  btn.addEventListener('click', () => enterApp(btn.dataset.user));
+});
+
+document.getElementById('switch-user-btn').addEventListener('click', () => {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('user-select-screen').style.display = 'flex';
+  CURRENT_USER = '';
+  store = {};
+});
+
+// ============================================================
 // INIT
 // ============================================================
-startQuiz('todas');
+// Start on user select screen - app starts after user picks
 </script>
+</div><!-- #app -->
 </body>
 </html>
