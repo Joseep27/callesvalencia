@@ -292,6 +292,11 @@
   .badge-campanar { background: rgba(240,165,0,0.15); color: var(--campanar); }
 
   /* EMPTY STATE */
+  .empty-state-card {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .empty-state-card .icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state-card p { font-size: 18px; line-height: 1.6; }
   .empty-state {
     text-align: center; padding: 60px 20px; color: var(--muted);
   }
@@ -393,6 +398,11 @@
         <button class="btn btn-primary" id="btn-check">Comprobar</button>
         <button class="btn btn-skip" id="btn-next">Siguiente →</button>
       </div>
+    </div>
+
+    <div class="empty-state-card" id="empty-state-card" style="display:none;">
+      <div class="icon">🏜️</div>
+      <p id="empty-state-msg">No hay calles falladas aún.<br>Practica primero en otra pestaña.</p>
     </div>
 
     <div class="completed-card" id="completed-card">
@@ -1201,11 +1211,17 @@ function startQuiz(zone) {
   currentZone = zone;
   const entries = getFilteredEntries(zone);
   if (!entries.length) {
-    document.getElementById('quiz-card').style.display = 'block';
+    document.getElementById('quiz-card').style.display = 'none';
     document.getElementById('completed-card').classList.remove('show');
-    document.getElementById('quiz-card').innerHTML = `<div class="empty-state"><div class="icon">🏜️</div><p>No hay calles falladas aún.<br>Practica primero en otra pestaña.</p></div>`;
+    const msg = zone === 'repaso'
+      ? 'No hay calles falladas aún.<br>Practica primero en otra pestaña.'
+      : 'No hay calles en esta zona.';
+    document.getElementById('empty-state-msg').innerHTML = msg;
+    document.getElementById('empty-state-card').style.display = 'block';
+    document.getElementById('feedback-bar').classList.remove('show');
     return;
   }
+  document.getElementById('empty-state-card').style.display = 'none';
   queue = shuffle(entries);
   qIndex = 0;
   answered = false;
@@ -1226,6 +1242,9 @@ function renderQuestion() {
   answered = false;
 
   // Restore card HTML structure
+  document.getElementById('empty-state-card').style.display = 'none';
+  document.getElementById('quiz-card').style.display = 'block';
+  document.getElementById('completed-card').classList.remove('show');
   const card = document.getElementById('quiz-card');
   // reset color classes
   card.className = 'quiz-card zone-' + e.zone.toLowerCase();
