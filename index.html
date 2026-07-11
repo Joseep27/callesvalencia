@@ -339,6 +339,25 @@
   }
   .mapa-links a { color: var(--muted); text-decoration: none; }
   .mapa-links a:hover { color: var(--text); text-decoration: underline; }
+  .mapa-fix { display: none; margin-top: 8px; }
+  .mapa-fix.open { display: block; }
+  .mapa-fix input {
+    width: 100%; padding: 9px 11px; font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+  }
+  .mapa-fix input:focus { outline: none; border-color: var(--norte); }
+  .mapa-fix button {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em; font-size: 14px;
+    padding: 7px 18px; border-radius: 8px; border: none;
+    background: var(--norte); color: #fff; cursor: pointer;
+  }
+  .mapa-fix-hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+  .mapa-fixed-badge {
+    display: inline-block; font-size: 11px; color: var(--oeste);
+    border: 1px solid var(--oeste); border-radius: 6px; padding: 0 6px; margin-left: 6px;
+  }
 
   /* HISTORIAL DE ESTA CALLE */
   .calle-hist {
@@ -610,6 +629,13 @@
           <div class="mapa-links">
             <a id="mapa-open" href="#" target="_blank" rel="noopener">Pantalla completa ↗</a>
             <a id="mapa-open-classic" href="#" target="_blank" rel="noopener">Maps clásico (pin) ↗</a>
+            <a id="mapa-fix-toggle" href="#">✎ Corregir ubicación</a>
+            <a id="mapa-research" href="#">↻ Volver a buscar</a>
+          </div>
+          <div class="mapa-fix" id="mapa-fix">
+            <input type="text" id="mapa-fix-input" placeholder="Pega «39.48, -0.35» o un enlace de Google Maps" autocomplete="off">
+            <button id="mapa-fix-save" type="button">Guardar</button>
+            <div class="mapa-fix-hint">Consejo: en Google Maps, clic derecho sobre el punto exacto → clic en las coordenadas para copiarlas, y pégalas aquí.</div>
           </div>
         </div>
       </div>
@@ -1496,19 +1522,34 @@ function expandCalle(c) {
 function loadGeo() { try { return JSON.parse(localStorage.getItem(GEO_KEY)) || {}; } catch { return {}; } }
 function saveGeo(g) { try { localStorage.setItem(GEO_KEY, JSON.stringify(g)); } catch {} }
 
+// Caja aproximada del área de Valencia (para no coger calles de otras ciudades)
+const VLC_BOX = { minLon: -0.50, maxLat: 39.58, maxLon: -0.25, minLat: 39.36 };
+function inVLC(lat, lon) {
+  return lat >= VLC_BOX.minLat && lat <= VLC_BOX.maxLat && lon >= VLC_BOX.minLon && lon <= VLC_BOX.maxLon;
+}
+
 async function geocodeCalle(calle) {
   const cache = loadGeo();
-  if (cache[calle]) return cache[calle];
+  if (cache[calle]) {
+    const c = cache[calle];
+    // Respeta las corregidas a mano; descarta las viejas que caían fuera de Valencia
+    if (c.manual || inVLC(c.lat, c.lon)) return c;
+  }
   const q = encodeURIComponent(expandCalle(calle) + ', València, España');
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${q}`;
+  const vb = `${VLC_BOX.minLon},${VLC_BOX.maxLat},${VLC_BOX.maxLon},${VLC_BOX.minLat}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=es&viewbox=${vb}&bounded=1&q=${q}`;
   try {
     const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const d = await r.json();
     if (d && d[0]) {
-      const coord = { lat: +parseFloat(d[0].lat).toFixed(6), lon: +parseFloat(d[0].lon).toFixed(6) };
-      cache[calle] = coord;
-      saveGeo(cache);
-      return coord;
+      const lat = +parseFloat(d[0].lat).toFixed(6);
+      const lon = +parseFloat(d[0].lon).toFixed(6);
+      if (inVLC(lat, lon)) {
+        const coord = { lat, lon };
+        cache[calle] = coord;
+        saveGeo(cache);
+        return coord;
+      }
     }
   } catch (e) {}
   return null;
@@ -1526,6 +1567,18 @@ function coloredViewer(coord) {
 }
 function classicSearch(calle) {
   return `https://www.google.com/maps/search/${encodeURIComponent(expandCalle(calle) + ', València, Spain')}`;
+}
+
+function renderMapFrame(coord) {
+  const loading = document.getElementById('mapa-loading');
+  const frame = document.getElementById('mapa-frame');
+  loading.style.display = 'flex';
+  loading.textContent = coord ? 'Cargando mapa…' : 'Sin ubicación exacta — mostrando mapa completo';
+  frame.style.opacity = '0';
+  frame.onload = () => { loading.style.display = 'none'; frame.style.opacity = '1'; };
+  frame.src = coloredEmbed(coord);
+  document.getElementById('mapa-open').href = coloredViewer(coord);
+  setTimeout(() => { loading.style.display = 'none'; frame.style.opacity = '1'; }, 5000);
 }
 
 async function toggleMapa() {
@@ -1549,19 +1602,63 @@ async function toggleMapa() {
   loading.style.display = 'flex';
   frame.style.opacity = '0';
 
-  // Enlace al Maps clásico ya disponible al momento
   document.getElementById('mapa-open-classic').href = classicSearch(e.calle);
 
   const coord = await geocodeCalle(e.calle);
-  // El usuario pudo cambiar de calle mientras buscaba
   if (queue[qIndex] !== e || !body.classList.contains('visible')) return;
+  renderMapFrame(coord);
+}
 
-  if (!coord) loading.textContent = 'Sin ubicación exacta — mostrando mapa completo';
-  frame.onload = () => { loading.style.display = 'none'; frame.style.opacity = '1'; };
-  frame.src = coloredEmbed(coord);
-  document.getElementById('mapa-open').href = coloredViewer(coord);
-  // Respaldo por si onload no dispara
-  setTimeout(() => { loading.style.display = 'none'; frame.style.opacity = '1'; }, 5000);
+// Acepta «39.48, -0.35», «-0.35, 39.48» o un enlace de Google Maps
+function parseCoord(text) {
+  if (!text) return null;
+  text = text.trim();
+  let lat, lon;
+  const m = text.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+        || text.match(/[?&]ll=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/i)
+        || text.match(/[?&]q=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/i)
+        || text.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (m) { lat = parseFloat(m[1]); lon = parseFloat(m[2]); }
+  else {
+    const nums = text.match(/-?\d+\.\d+/g);
+    if (nums && nums.length >= 2) { lat = parseFloat(nums[0]); lon = parseFloat(nums[1]); }
+  }
+  if (lat === undefined || lon === undefined || isNaN(lat) || isNaN(lon)) return null;
+  // si vienen invertidas (lon, lat) las corrige
+  if (Math.abs(lat) < 5 && lon > 35 && lon < 44) { const t = lat; lat = lon; lon = t; }
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat: +lat.toFixed(6), lon: +lon.toFixed(6), manual: true };
+}
+
+function saveManualCoord() {
+  if (qIndex >= queue.length) return;
+  const e = queue[qIndex];
+  const input = document.getElementById('mapa-fix-input');
+  const coord = parseCoord(input.value);
+  if (!coord) { input.style.borderColor = 'var(--wrong)'; return; }
+  input.style.borderColor = '';
+  const cache = loadGeo();
+  cache[e.calle] = coord;
+  saveGeo(cache);
+  input.value = '';
+  document.getElementById('mapa-fix').classList.remove('open');
+  document.getElementById('mapa-open-classic').href = classicSearch(e.calle);
+  renderMapFrame(coord);
+}
+
+async function researchCoord() {
+  if (qIndex >= queue.length) return;
+  const e = queue[qIndex];
+  const cache = loadGeo();
+  delete cache[e.calle];
+  saveGeo(cache);
+  const loading = document.getElementById('mapa-loading');
+  loading.style.display = 'flex';
+  loading.textContent = 'Buscando ubicación…';
+  document.getElementById('mapa-frame').style.opacity = '0';
+  const coord = await geocodeCalle(e.calle);
+  if (queue[qIndex] !== e) return;
+  renderMapFrame(coord);
 }
 
 // ============================================================
@@ -1683,6 +1780,8 @@ function renderQuestion() {
   document.getElementById('btn-maps').classList.remove('active');
   document.getElementById('mapa-body').classList.remove('visible');
   document.getElementById('mapa-frame').src = 'about:blank';
+  document.getElementById('mapa-fix').classList.remove('open');
+  document.getElementById('mapa-fix-input').value = '';
 
   // Historial
   const rec = getRecord(e.calle);
@@ -2092,6 +2191,14 @@ document.getElementById('tabs').addEventListener('click', e => {
 
 // Modificar
 document.getElementById('btn-maps').addEventListener('click', toggleMapa);
+document.getElementById('mapa-fix-toggle').addEventListener('click', ev => {
+  ev.preventDefault();
+  const f = document.getElementById('mapa-fix');
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) document.getElementById('mapa-fix-input').focus();
+});
+document.getElementById('mapa-fix-save').addEventListener('click', saveManualCoord);
+document.getElementById('mapa-research').addEventListener('click', ev => { ev.preventDefault(); researchCoord(); });
 document.getElementById('btn-modify').addEventListener('click', openModifyPanel);
 document.getElementById('btn-mod-save').addEventListener('click', saveModify);
 document.getElementById('btn-mod-cancel').addEventListener('click', () => {
@@ -2210,6 +2317,11 @@ document.addEventListener('keydown', e => {
   if (active === document.getElementById('mod-p1') || active === document.getElementById('mod-p2')) {
     e.preventDefault();
     saveModify();
+    return;
+  }
+  if (active === document.getElementById('mapa-fix-input')) {
+    e.preventDefault();
+    saveManualCoord();
     return;
   }
   if (active === document.getElementById('import-box')) return;
