@@ -1735,7 +1735,7 @@ let sessionOk = 0;
 let sessionFail = 0;
 
 function isFailedRec(r) {
-  return !!(r && r.fail > 0 && (r.streak || 0) < 3);
+  return !!(r && r.fail > 0 && (r.streak || 0) < 5);
 }
 
 function getFilteredEntries(zone) {
