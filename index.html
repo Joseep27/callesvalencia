@@ -280,6 +280,48 @@
   .tab[data-zone="campanar"].active { border-color: var(--campanar); color: var(--campanar); }
   .tab[data-zone="repaso"].active { border-color: #c084fc; color: #c084fc; }
 
+  .tab-pct {
+    display: inline-block; margin-left: 6px; font-size: 11px;
+    font-weight: 700; color: var(--muted); letter-spacing: 0.02em;
+  }
+  .tab.active .tab-pct { color: inherit; opacity: 0.85; }
+
+  /* PROGRESO GENERAL (calles aprendidas) */
+  .mastery-global {
+    padding: 10px 24px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .mastery-global-label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  .mastery-global-label b { color: var(--correct); font-size: 15px; }
+  .mastery-global-bar {
+    width: 100%; height: 8px; border-radius: 6px;
+    background: var(--surface2); overflow: hidden;
+  }
+  .mastery-global-fill {
+    height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, var(--oeste), var(--correct));
+    transition: width 0.3s ease;
+  }
+
+  /* BOTON APRENDIDA */
+  .btn-aprendida {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-aprendida:hover { border-color: var(--correct); color: var(--correct); }
+  .btn-aprendida.on {
+    border-color: var(--correct); color: #fff; background: var(--correct);
+  }
+
   .zone-filter { display: none; margin: 2px 0 14px; justify-content: center; }
   .zone-filter.show { display: flex; }
   .zone-filter-btn {
@@ -619,14 +661,22 @@
 </header>
 
 <div class="tabs" id="tabs">
-  <div class="tab active" data-zone="todas">Todas</div>
-  <div class="tab" data-zone="norte">Norte</div>
-  <div class="tab" data-zone="central">Central</div>
-  <div class="tab" data-zone="oeste">Oeste</div>
-  <div class="tab" data-zone="campanar">Campanar</div>
+  <div class="tab active" data-zone="todas">Todas<span class="tab-pct" id="pct-todas"></span></div>
+  <div class="tab" data-zone="norte">Norte<span class="tab-pct" id="pct-norte"></span></div>
+  <div class="tab" data-zone="central">Central<span class="tab-pct" id="pct-central"></span></div>
+  <div class="tab" data-zone="oeste">Oeste<span class="tab-pct" id="pct-oeste"></span></div>
+  <div class="tab" data-zone="campanar">Campanar<span class="tab-pct" id="pct-campanar"></span></div>
   <div class="tab" data-zone="repaso">★ Repaso</div>
   <div class="tab" data-zone="stats">📊 Stats</div>
   <div class="tab" data-zone="historial">📝 Historial</div>
+</div>
+
+<div class="mastery-global">
+  <div class="mastery-global-label">
+    <span>Progreso general</span>
+    <span><b id="mastery-global-pct">0%</b> <span id="mastery-global-count" style="color:var(--muted)">(0/0)</span></span>
+  </div>
+  <div class="mastery-global-bar"><div class="mastery-global-fill" id="mastery-global-fill" style="width:0%"></div></div>
 </div>
 
 <main id="main-content">
@@ -653,6 +703,7 @@
     <div class="quiz-card" id="quiz-card">
       <div class="card-actions">
         <button id="btn-maps" class="btn-icon" type="button" title="Ver mapa de zonas">📍</button>
+        <button id="btn-aprendida" class="btn-aprendida" type="button">⬜ Aprendida</button>
         <button id="btn-modify" class="btn-modify" type="button">✎ Modificar</button>
       </div>
       <div class="calle-label">¿Qué parques corresponden?</div>
@@ -1711,11 +1762,13 @@ function saveStorage(data) {
 }
 
 let store = {};
-// store = { [calle]: { ok: N, fail: N, nota: '' }, ... }
+// store = { [calle]: { ok: N, fail: N, nota: '', aprendida: bool, manual: bool }, ... }
 
 function getRecord(calle) {
-  if (!store[calle]) store[calle] = { ok: 0, fail: 0, streak: 0, nota: '' };
+  if (!store[calle]) store[calle] = { ok: 0, fail: 0, streak: 0, nota: '', aprendida: false, manual: false };
   if (store[calle].streak === undefined) store[calle].streak = 0;
+  if (store[calle].aprendida === undefined) store[calle].aprendida = false;
+  if (store[calle].manual === undefined) store[calle].manual = false;
   return store[calle];
 }
 function saveRecord(calle, rec) {
@@ -1773,6 +1826,7 @@ function shuffle(arr) {
 function startQuiz(zone) {
   currentZone = zone;
   renderBelowQuiz();
+  renderMastery();
   const entries = getFilteredEntries(zone);
   if (!entries.length) {
     document.getElementById('quiz-card').style.display = 'none';
@@ -1850,6 +1904,7 @@ function renderQuestion() {
   document.getElementById('nota-body').classList.remove('visible');
   document.getElementById('nota-toggle').classList.remove('open');
   updateNoteFlag();
+  updateAprendidaBtn(rec);
   
   
 
@@ -1936,10 +1991,18 @@ function checkAnswer() {
     showFeedback(false, e);
   }
 
+  // Aprendida automática: 5 aciertos seguidos. Si el usuario la controla
+  // manualmente, no la tocamos (ni al acertar ni al fallar).
+  if (!rec.manual) {
+    rec.aprendida = rec.streak >= 5;
+  }
+
   saveRecord(e.calle, rec);
   answered = true;
   document.getElementById('btn-check').textContent = 'Siguiente →';
+  updateAprendidaBtn(rec);
   updateHeaderStats();
+  renderMastery();
 }
 
 function showFeedback(ok, e) {
@@ -1996,6 +2059,41 @@ function showCompleted() {
 
 function updateHeaderStats() {
   // stats pills removed
+}
+
+// ============================================================
+// PROGRESO / APRENDIDAS
+// ============================================================
+function computeMastery(zone) {
+  let list = ALL_ENTRIES;
+  if (zone && zone !== 'todas') {
+    const z = capZone(zone);
+    list = list.filter(e => e.zone === z);
+  }
+  const total = list.length;
+  const learned = list.filter(e => getRecord(e.calle).aprendida).length;
+  const pct = total ? Math.round((learned / total) * 100) : 0;
+  return { learned, total, pct };
+}
+
+function renderMastery() {
+  const g = computeMastery('todas');
+  document.getElementById('mastery-global-pct').textContent = g.pct + '%';
+  document.getElementById('mastery-global-count').textContent = `(${g.learned}/${g.total})`;
+  document.getElementById('mastery-global-fill').style.width = g.pct + '%';
+
+  ['todas', 'norte', 'central', 'oeste', 'campanar'].forEach(z => {
+    const m = computeMastery(z);
+    const el = document.getElementById('pct-' + z);
+    if (el) el.textContent = ` ${m.pct}%`;
+  });
+}
+
+function updateAprendidaBtn(rec) {
+  const btn = document.getElementById('btn-aprendida');
+  if (!btn) return;
+  btn.classList.toggle('on', !!rec.aprendida);
+  btn.textContent = rec.aprendida ? '✅ Aprendida' : '⬜ Aprendida';
 }
 
 // ============================================================
@@ -2322,6 +2420,16 @@ document.getElementById('mapa-fix-toggle').addEventListener('click', ev => {
 document.getElementById('mapa-fix-save').addEventListener('click', saveManualCoord);
 document.getElementById('mapa-research').addEventListener('click', ev => { ev.preventDefault(); researchCoord(); });
 document.getElementById('btn-modify').addEventListener('click', openModifyPanel);
+document.getElementById('btn-aprendida').addEventListener('click', () => {
+  if (qIndex >= queue.length) return;
+  const e = queue[qIndex];
+  const rec = getRecord(e.calle);
+  rec.aprendida = !rec.aprendida;
+  rec.manual = true; // a partir de ahora, el contador automático no la toca
+  saveRecord(e.calle, rec);
+  updateAprendidaBtn(rec);
+  renderMastery();
+});
 document.getElementById('btn-mod-save').addEventListener('click', saveModify);
 document.getElementById('btn-mod-cancel').addEventListener('click', () => {
   document.getElementById('modify-panel').classList.remove('open');
@@ -2517,6 +2625,7 @@ function enterApp(user) {
   document.getElementById('app').style.display = 'block';
   document.getElementById('switch-user-btn').textContent = '↩ ' + user;
   document.getElementById('motivational-phrase').textContent = getDailyPhrase();
+  renderMastery();
   startQuiz('todas');
 }
 
