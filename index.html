@@ -13,6 +13,7 @@
     --central: #0a7be8;
     --oeste: #10b36e;
     --campanar: #f0a500;
+    --saler: #afb42b;
     --bg: #0e0e12;
     --surface: #17171f;
     --surface2: #1e1e28;
@@ -185,6 +186,7 @@
   .hz-central { color: var(--central); border: 1px solid var(--central); }
   .hz-oeste { color: var(--oeste); border: 1px solid var(--oeste); }
   .hz-campanar { color: var(--campanar); border: 1px solid var(--campanar); }
+  .hz-saler { color: var(--saler); border: 1px solid var(--saler); }
   .hist-item .hmeta { margin-left: auto; font-size: 13px; color: var(--muted); }
   .hist-revert-btn {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
@@ -280,6 +282,7 @@
   .tab[data-zone="central"].active { border-color: var(--central); color: var(--central); }
   .tab[data-zone="oeste"].active { border-color: var(--oeste); color: var(--oeste); }
   .tab[data-zone="campanar"].active { border-color: var(--campanar); color: var(--campanar); }
+  .tab[data-zone="saler"].active { border-color: var(--saler); color: var(--saler); }
   .tab[data-zone="repaso"].active { border-color: #c084fc; color: #c084fc; }
 
   .tab-pct {
@@ -363,6 +366,7 @@
   .quiz-card.zone-central::before { background: var(--central); }
   .quiz-card.zone-oeste::before { background: var(--oeste); }
   .quiz-card.zone-campanar::before { background: var(--campanar); }
+  .quiz-card.zone-saler::before { background: var(--saler); }
   .quiz-card.zone-hidden::before { background: transparent; }
 
   .calle-label {
@@ -623,6 +627,7 @@
   .badge-central { background: rgba(10,123,232,0.15); color: var(--central); }
   .badge-oeste { background: rgba(16,179,110,0.15); color: var(--oeste); }
   .badge-campanar { background: rgba(240,165,0,0.15); color: var(--campanar); }
+  .badge-saler { background: rgba(175,180,41,0.15); color: var(--saler); }
 
   /* EMPTY STATE */
   .empty-state-card {
@@ -688,6 +693,7 @@
   <div class="tab" data-zone="central">Central<span class="tab-pct" id="pct-central"></span></div>
   <div class="tab" data-zone="oeste">Oeste<span class="tab-pct" id="pct-oeste"></span></div>
   <div class="tab" data-zone="campanar">Campanar<span class="tab-pct" id="pct-campanar"></span></div>
+  <div class="tab" data-zone="saler">Saler<span class="tab-pct" id="pct-saler"></span></div>
   <div class="tab" data-zone="repaso">★ Repaso</div>
   <div class="tab" data-zone="stats">📊 Stats</div>
   <div class="tab" data-zone="historial">📝 Historial</div>
@@ -767,11 +773,11 @@
         <div class="respuesta-row" id="respuesta-row">
           <div class="input-group">
             <label>1ª Salida</label>
-            <input type="text" class="parque-select" id="sel-primero" placeholder="Norte / Central / Oeste / Campanar" autocomplete="off">
+            <input type="text" class="parque-select" id="sel-primero" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
           </div>
           <div class="input-group" id="grupo-apoyo">
             <label>Parque de Apoyo</label>
-            <input type="text" class="parque-select" id="sel-apoyo" placeholder="Norte / Central / Oeste / Campanar" autocomplete="off">
+            <input type="text" class="parque-select" id="sel-apoyo" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
           </div>
         </div>
       </div>
@@ -781,11 +787,11 @@
         <div class="mod-row">
           <div class="input-group">
             <label>Nueva 1ª Salida</label>
-            <input type="text" class="mod-input" id="mod-p1" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar">
+            <input type="text" class="mod-input" id="mod-p1" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar / Saler">
           </div>
           <div class="input-group">
             <label>Nueva 2ª Salida</label>
-            <input type="text" class="mod-input" id="mod-p2" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar">
+            <input type="text" class="mod-input" id="mod-p2" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar / Saler">
           </div>
         </div>
         <div class="mod-actions">
@@ -799,6 +805,7 @@
         <option value="Central"></option>
         <option value="Oeste"></option>
         <option value="Campanar"></option>
+        <option value="Saler"></option>
       </datalist>
 
       <div class="btn-row">
@@ -1530,7 +1537,81 @@ Oeste,Topónimos / Otros,C Joaquin Navarro,Oeste,Central
 Oeste,Topónimos / Otros,C Tomas de Villarroya,Oeste,Central
 Oeste,Topónimos / Otros,C Mayans,Norte,Campanar
 Oeste,Topónimos / Otros,V30,Oeste,Central
-Oeste,Topónimos / Otros,V30,Oeste,Campanar`;
+Oeste,Topónimos / Otros,V30,Oeste,Campanar
+Saler,Calles del Saler,C la Serella,Saler,Central
+Saler,El Saler — Iglesia Parroquial María — Madre de Cristo,Pza Mayor,Saler,Central
+Saler,Calles del Saler,Travessia del Pinedo al Mar,Saler,Central
+Saler,Calles del Saler,Pza Portadors de la Verge,Saler,Central
+Saler,El Saler — CEIP Pinedo,Cami Canal,Saler,Central
+Saler,Calles del Saler,Carrera del Riu,Saler,Central
+Saler,Calles del Saler,C Mossèn Cuenca,Saler,Central
+Saler,Calles del Saler,C Pintor Manuel Sigüenza,Saler,Central
+Saler,Calles del Saler,C Marino Villamil,Saler,Central
+Saler,Calles del Saler,C Verge de la Mar,Saler,Central
+Saler,Calles del Saler,C Pascual Tatay,Saler,Central
+Saler,Calles del Saler,Cami Montanares/Montañares,Saler,Central
+Saler,Calles del Saler,CV- 500,Saler,Central
+Saler,Calles del Saler,C Don Carlos,Saler,Central
+Saler,Calles del Saler,C Sèquia del Rei,Saler,Central
+Saler,Calles del Saler,C Piverot,Saler,Central
+Saler,Calles del Saler,C Rambla del Saler,Saler,Central
+Saler,Calles del Saler,C de l'Historiador Betí,Saler,Central
+Saler,Calles del Saler,C del Puerto de la Albufera,Saler,Central
+Saler,El Saler — Casa de la Demanà,C de l'Embarcador,Saler,Central
+Saler,El Saler — Hostal Andrés,C de l'Anguilera,Saler,Central
+Saler,Calles del Saler,C de la Devesa,Saler,Central
+Saler,Calles del Saler,Av los Pinares,Saler,Central
+Saler,Calles del Saler,C Canónigo Alcover,Saler,Central
+Saler,Calles del Saler,Av Gola de Puchol,Saler,Central
+Saler,Calles del Saler,C Vicente Baldoví,Saler,Central
+Saler,Calles del Saler,C Pintor Martí Girbés,Saler,Central
+Saler,Calles del Saler,C Jesuset de l'Hort,Saler,Central
+Saler,Calles del Saler,C Novelda,Saler,Central
+Saler,Calles del Saler,C Vila Joiosa,Saler,Central
+Saler,Calles del Saler,C de Monòver,Saler,Central
+Saler,Calles del Saler,C de Cirat,Saler,Central
+Saler,Calles del Saler,C de Calpe,Saler,Central
+Saler,Calles del Saler,C Albufera,Saler,Central
+Saler,Calles del Saler,C Francsco Monleón,Saler,Central
+Saler,Calles del Saler,C Arzobispo Aliaga,Saler,Central
+Saler,Calles del Saler,C Vizconde de Valdesoto,Saler,Central
+Saler,Calles del Saler,Pza la Sequiota,Saler,Central
+Saler,Calles del Saler,C Caudete,Saler,Central
+Saler,El Saler — Centro de Salud del Palmar,C dels Redolins,Saler,Central
+Saler,Calles del Saler,Pza Número 37,Saler,Central
+Saler,Calles del Saler,Av de Pantalo,Saler,Central
+Saler,Calles del Saler,C Timón,Saler,Central
+Saler,Calles del Saler,Entitat Gola Perellonet,Saler,Central
+Saler,Calles del Saler,C Amura,Saler,Central
+Saler,Calles del Saler,C Sotavento,Saler,Central
+Saler,Calles del Saler,C Sobrevent,Saler,Central
+Saler,Calles del Saler,Paseo de les Goles,Saler,Central
+Saler,Calles del Saler,C Toldilla,Saler,Central
+Saler,Calles del Saler,C del Cabestrante,Saler,Central
+Saler,Calles del Saler,C de Llebeig,Saler,Central
+Saler,Calles del Saler,C de l'Oroneta,Saler,Central
+Saler,Calles del Saler,C Botavara,Saler,Central
+Saler,Calles del Saler,C del Collverd,Saler,Central
+Saler,Calles del Saler,C Mesana,Saler,Central
+Saler,Calles del Saler,C Arboladura,Saler,Central
+Saler,Calles del Saler,C Ent. Niset,Saler,Central
+Saler,Calles del Saler,C las Dunas,Saler,Central
+Saler,Calles del Saler,C de Helice,Saler,Central
+Saler,Calles del Saler,C Mertinet,Saler,Central
+Saler,Calles del Saler,C Lluís Sánchez Polack T,Saler,Central
+Saler,Calles del Saler,C Eslora,Saler,Central
+Saler,Calles del Saler,C Sirena,Saler,Central
+Saler,Calles del Saler,C los Delfines,Saler,Central
+Saler,Calles del Saler,C de Llobarro,Saler,Central
+Saler,Calles del Saler,C Mascarón,Saler,Central
+Saler,Calles del Saler,C les Escales,Saler,Central
+Saler,Calles del Saler,C Bitácora,Saler,Central
+Saler,Calles del Saler,C Estribor,Saler,Central
+Saler,Calles del Saler,C Proa,Saler,Central
+Saler,Calles del Saler,C de l'Escotilla,Saler,Central
+Saler,Calles del Saler,C Mástil,Saler,Central
+Saler,Calles del Saler,C Ancla,Saler,Central
+Saler,Calles del Saler,Entrada vora del panta,Saler,Central`;
 
 // Parse CSV → array of entries
 // Each entry: { zone, grupo, calle, salidas: [[p1,p2], ...] }
@@ -1546,8 +1627,7 @@ function parseData(raw) {
     const calle = parts[2].trim();
     const p1 = parts[3].trim();
     const p2 = parts[4].trim();
-    // ignore lines with "Saler" or unknown
-    if (!p1 || !p2 || p1 === 'Sur' || p2 === 'Saler' || p2 === 'Sur') continue;
+    if (!p1 || !p2) continue;
 
     const key = calle + '|||' + zone;
     if (!map.has(key)) {
@@ -1884,7 +1964,7 @@ function getFilteredEntries(zone) {
 function updateZoneFilterUI(zone) {
   const wrap = document.getElementById('zone-filter');
   const btn = document.getElementById('zone-filter-btn');
-  const isParque = ['norte', 'central', 'oeste', 'campanar'].includes(zone);
+  const isParque = ['norte', 'central', 'oeste', 'campanar', 'saler'].includes(zone);
   wrap.classList.toggle('show', isParque);
   if (!isParque) return;
   const z = zone.charAt(0).toUpperCase() + zone.slice(1);
@@ -2161,7 +2241,7 @@ function renderMastery() {
   document.getElementById('mastery-global-count').textContent = `(${g.learned}/${g.total})`;
   document.getElementById('mastery-global-fill').style.width = g.pct + '%';
 
-  ['todas', 'norte', 'central', 'oeste', 'campanar'].forEach(z => {
+  ['todas', 'norte', 'central', 'oeste', 'campanar', 'saler'].forEach(z => {
     const m = computeMastery(z);
     const el = document.getElementById('pct-' + z);
     if (el) el.textContent = ` ${m.pct}%`;
@@ -2370,7 +2450,7 @@ function revertFromHistorial(key) {
 
 // Desplegables debajo del cuestionario
 function belowScope() {
-  return ['norte', 'central', 'oeste', 'campanar'].includes(currentZone) ? currentZone : 'todas';
+  return ['norte', 'central', 'oeste', 'campanar', 'saler'].includes(currentZone) ? currentZone : 'todas';
 }
 
 function renderBelowQuiz() {
