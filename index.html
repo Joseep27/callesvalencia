@@ -2036,7 +2036,7 @@ function renderQuestion() {
 
   document.getElementById('calle-nombre').innerHTML =
     e.calle + (e.modified ? '<span class="mod-badge">modificada</span>' : '');
-  document.getElementById('calle-grupo').textContent = e.grupo;
+  document.getElementById('calle-grupo').textContent = (e.grupo === 'Calles del Saler') ? '' : e.grupo;
 
   // cerrar panel de modificación al cambiar de calle
   document.getElementById('modify-panel').classList.remove('open');
@@ -2054,7 +2054,7 @@ function renderQuestion() {
   if (rec.ok > 0 || rec.fail > 0) {
     hist.innerHTML = `Historial: <span class="ok">✓ ${rec.ok}</span>  <span class="fail">✗ ${rec.fail}</span>`;
   } else {
-    hist.innerHTML = 'Primera vez';
+    hist.innerHTML = '';
   }
 
   // Nota
