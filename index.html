@@ -341,6 +341,18 @@
     border-color: var(--wrong); background: var(--wrong); color: #fff;
   }
 
+  .grupo-filter { display: none; margin: 2px 0 14px; justify-content: center; }
+  .grupo-filter.show { display: flex; }
+  .grupo-filter-select {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+    font-size: 15px; letter-spacing: 0.03em; text-transform: uppercase;
+    padding: 7px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); transition: all 0.15s; max-width: 92vw;
+  }
+  .grupo-filter-select:hover { border-color: var(--campanar); }
+  .grupo-filter-select:focus { outline: none; border-color: var(--campanar); }
+
   /* MAIN */
   main {
     max-width: 680px; margin: 0 auto;
@@ -713,6 +725,10 @@
   <div id="quiz-area">
     <div class="progress-label" id="progress-label">1 / 10</div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+
+    <div class="grupo-filter" id="grupo-filter">
+      <select class="grupo-filter-select" id="grupo-filter-select"></select>
+    </div>
 
     <div class="zone-filter" id="zone-filter">
       <button class="zone-filter-btn" id="zone-filter-btn" type="button">★ Solo falladas</button>
@@ -1646,6 +1662,11 @@ function parseData(raw) {
 
 const ALL_ENTRIES = parseData(RAW);
 
+// Lista de grupos temáticos únicos (para el desplegable de filtro)
+const GRUPOS = [...new Set(ALL_ENTRIES.map(e => e.grupo))]
+  .filter(Boolean)
+  .sort((a, b) => a.localeCompare(b, 'es'));
+
 // ============================================================
 // MODIFICACIONES + HISTORIAL (compartido entre usuarios del mismo navegador)
 // ============================================================
@@ -1941,6 +1962,39 @@ function saveRecord(calle, rec) {
 let currentZone = 'todas';
 let onlyFailed = false;
 let queue = [];
+
+// ============================================================
+// FILTRO POR GRUPO TEMÁTICO (independiente entre Todas y Repaso)
+// ============================================================
+function loadGrupoSel(zone) {
+  try { return localStorage.getItem('grupoSel_' + zone) || 'todas'; } catch { return 'todas'; }
+}
+function saveGrupoSel(zone, grupo) {
+  try { localStorage.setItem('grupoSel_' + zone, grupo); } catch {}
+}
+let grupoSelTodas = loadGrupoSel('todas');
+let grupoSelRepaso = loadGrupoSel('repaso');
+function getGrupoSel(zone) {
+  return zone === 'repaso' ? grupoSelRepaso : grupoSelTodas;
+}
+function setGrupoSel(zone, grupo) {
+  if (zone === 'repaso') grupoSelRepaso = grupo; else grupoSelTodas = grupo;
+  saveGrupoSel(zone, grupo);
+}
+function populateGrupoSelect() {
+  const counts = {};
+  ALL_ENTRIES.forEach(e => { counts[e.grupo] = (counts[e.grupo] || 0) + 1; });
+  const sel = document.getElementById('grupo-filter-select');
+  sel.innerHTML = `<option value="todas">Todos los grupos (${ALL_ENTRIES.length})</option>` +
+    GRUPOS.map(g => `<option value="${g.replace(/"/g, '&quot;')}">${g} (${counts[g] || 0})</option>`).join('');
+}
+function updateGrupoFilterUI(zone) {
+  const wrap = document.getElementById('grupo-filter');
+  const applies = (zone === 'todas' || zone === 'repaso');
+  wrap.classList.toggle('show', applies);
+  if (!applies) return;
+  document.getElementById('grupo-filter-select').value = getGrupoSel(zone);
+}
 let qIndex = 0;
 let answered = false;
 let sessionOk = 0;
@@ -1951,9 +2005,17 @@ function isFailedRec(r) {
 }
 
 function getFilteredEntries(zone) {
-  if (zone === 'todas') return [...ALL_ENTRIES];
+  if (zone === 'todas') {
+    let list = [...ALL_ENTRIES];
+    const g = getGrupoSel('todas');
+    if (g !== 'todas') list = list.filter(e => e.grupo === g);
+    return list;
+  }
   if (zone === 'repaso') {
-    return ALL_ENTRIES.filter(e => isFailedRec(store[e.calle]));
+    let list = ALL_ENTRIES.filter(e => isFailedRec(store[e.calle]));
+    const g = getGrupoSel('repaso');
+    if (g !== 'todas') list = list.filter(e => e.grupo === g);
+    return list;
   }
   const z = zone.charAt(0).toUpperCase() + zone.slice(1);
   let list = ALL_ENTRIES.filter(e => e.zone === z);
@@ -1984,17 +2046,25 @@ function shuffle(arr) {
 
 function startQuiz(zone) {
   currentZone = zone;
+  updateGrupoFilterUI(zone);
   renderBelowQuiz();
   renderMastery();
   const entries = getFilteredEntries(zone);
   if (!entries.length) {
     document.getElementById('quiz-card').style.display = 'none';
     document.getElementById('completed-card').classList.remove('show');
+    const grupoSel = getGrupoSel(zone);
+    const grupoTxt = (zone === 'todas' || zone === 'repaso') && grupoSel !== 'todas'
+      ? ` del grupo «${grupoSel}»` : '';
     const msg = zone === 'repaso'
-      ? 'No hay calles falladas aún.<br>Practica primero en otra pestaña.'
+      ? (grupoTxt
+          ? `No hay calles falladas${grupoTxt} (aún).<br>¡Sigue practicando ese grupo!`
+          : 'No hay calles falladas aún.<br>Practica primero en otra pestaña.')
       : onlyFailed
         ? 'No has fallado ninguna calle de este parque todavía.<br>¡Buen trabajo!'
-        : 'No hay calles en esta zona.';
+        : grupoTxt
+          ? `No hay calles${grupoTxt}.`
+          : 'No hay calles en esta zona.';
     document.getElementById('empty-state-msg').innerHTML = msg;
     document.getElementById('empty-state-card').style.display = 'block';
     document.getElementById('feedback-bar').classList.remove('show');
@@ -2567,6 +2637,12 @@ document.getElementById('zone-filter-btn').addEventListener('click', () => {
   updateZoneFilterUI(currentZone);
   startQuiz(currentZone);
 });
+
+document.getElementById('grupo-filter-select').addEventListener('change', (ev) => {
+  setGrupoSel(currentZone, ev.target.value);
+  startQuiz(currentZone);
+});
+populateGrupoSelect();
 
 // Modificar
 document.getElementById('btn-maps').addEventListener('click', toggleMapa);
