@@ -1942,14 +1942,23 @@ function saveStorage(data) {
 }
 
 let store = {};
-// store = { [calle]: { ok: N, fail: N, nota: '', aprendida: bool, manual: bool }, ... }
+// store = { [calle]: { ok: N, fail: N, nota: '', aprendida: bool, manual: bool, porGrupo: {[grupo]: {ok,fail}} }, ... }
 
 function getRecord(calle) {
-  if (!store[calle]) store[calle] = { ok: 0, fail: 0, streak: 0, nota: '', aprendida: false, manual: false };
+  if (!store[calle]) store[calle] = { ok: 0, fail: 0, streak: 0, nota: '', aprendida: false, manual: false, porGrupo: {} };
   if (store[calle].streak === undefined) store[calle].streak = 0;
   if (store[calle].aprendida === undefined) store[calle].aprendida = false;
   if (store[calle].manual === undefined) store[calle].manual = false;
+  if (store[calle].porGrupo === undefined) store[calle].porGrupo = {};
   return store[calle];
+}
+
+// Devuelve el grupo temático activo SOLO si estamos en Todas/Repaso con un
+// filtro de temática concreto seleccionado (no "todas los grupos").
+function grupoFiltroActivo() {
+  if (currentZone !== 'todas' && currentZone !== 'repaso') return null;
+  const g = getGrupoSel(currentZone);
+  return (g && g !== 'todas') ? g : null;
 }
 function saveRecord(calle, rec) {
   store[calle] = rec;
@@ -2118,10 +2127,18 @@ function renderQuestion() {
   document.getElementById('mapa-fix').classList.remove('open');
   document.getElementById('mapa-fix-input').value = '';
 
-  // Historial
+  // Historial (por temática si hay filtro de grupo activo; si no, el general)
   const rec = getRecord(e.calle);
   const hist = document.getElementById('calle-hist');
-  if (rec.ok > 0 || rec.fail > 0) {
+  const grupoActivo = grupoFiltroActivo();
+  if (grupoActivo) {
+    const gr = rec.porGrupo[grupoActivo];
+    if (gr && (gr.ok > 0 || gr.fail > 0)) {
+      hist.innerHTML = `Historial: <span class="ok">✓ ${gr.ok}</span>  <span class="fail">✗ ${gr.fail}</span>`;
+    } else {
+      hist.innerHTML = '';
+    }
+  } else if (rec.ok > 0 || rec.fail > 0) {
     hist.innerHTML = `Historial: <span class="ok">✓ ${rec.ok}</span>  <span class="fail">✗ ${rec.fail}</span>`;
   } else {
     hist.innerHTML = '';
@@ -2186,10 +2203,17 @@ function checkAnswer() {
 
   const normalize = v => v.trim().toLowerCase();
 
+  // e.salidas guarda, por cada combinación real, también su pareja invertida
+  // (añadida internamente para poder mostrar el feedback aunque el CSV liste
+  // algún par al revés). Esa pareja invertida NO es una respuesta válida:
+  // hay que quedarnos solo con las combinaciones donde el 1er parque es la
+  // zona de origen de la calle antes de comprobar la respuesta.
+  const real = e.salidas.filter(s => s[0] === e.zone);
+
   if (isZoneMode) {
     const apoyo = selA.value;
     if (!apoyo.trim()) { selA.style.borderColor = 'var(--wrong)'; return; }
-    const validApoyos = new Set(e.salidas.map(s => s[1].toLowerCase()));
+    const validApoyos = new Set(real.map(s => s[1].toLowerCase()));
     correct = validApoyos.has(normalize(apoyo));
     selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
   } else {
@@ -2197,7 +2221,7 @@ function checkAnswer() {
     const p2 = selA.value;
     if (!p1.trim()) { selP.style.borderColor = 'var(--wrong)'; return; }
     if (!p2.trim()) { selA.style.borderColor = 'var(--wrong)'; return; }
-    correct = e.salidas.some(s =>
+    correct = real.some(s =>
       s[0].toLowerCase() === normalize(p1) &&
       s[1].toLowerCase() === normalize(p2)
     );
@@ -2218,6 +2242,15 @@ function checkAnswer() {
     rec.streak = 0;
     sessionFail++;
     showFeedback(false, e);
+  }
+
+  // Historial por temática: solo suma aquí si estamos estudiando con un
+  // filtro de grupo concreto activo (no cuenta lo hecho en "Todas" sin
+  // filtro ni en las pestañas de parque, que siguen yendo al contador general).
+  const grupoActivo = grupoFiltroActivo();
+  if (grupoActivo) {
+    if (!rec.porGrupo[grupoActivo]) rec.porGrupo[grupoActivo] = { ok: 0, fail: 0 };
+    if (correct) rec.porGrupo[grupoActivo].ok++; else rec.porGrupo[grupoActivo].fail++;
   }
 
   // Aprendida automática: 5 aciertos seguidos. Si el usuario la controla
