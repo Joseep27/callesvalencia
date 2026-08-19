@@ -284,6 +284,7 @@
   .tab[data-zone="campanar"].active { border-color: var(--campanar); color: var(--campanar); }
   .tab[data-zone="saler"].active { border-color: var(--saler); color: var(--saler); }
   .tab[data-zone="repaso"].active { border-color: #c084fc; color: #c084fc; }
+  .tab[data-zone="plan"].active { border-color: var(--campanar); color: var(--campanar); }
 
   .tab-pct {
     display: inline-block; margin-left: 6px; font-size: 11px;
@@ -740,6 +741,7 @@
   <div class="tab" data-zone="campanar">Campanar<span class="tab-pct" id="pct-campanar"></span></div>
   <div class="tab" data-zone="saler">Saler<span class="tab-pct" id="pct-saler"></span></div>
   <div class="tab" data-zone="repaso">★ Repaso</div>
+  <div class="tab" data-zone="plan" id="tab-plan" style="display:none;">🗓 Plan</div>
   <div class="tab" data-zone="stats">📊 Stats</div>
   <div class="tab" data-zone="historial">📝 Historial</div>
 </div>
@@ -752,7 +754,7 @@
   <div class="mastery-global-bar"><div class="mastery-global-fill" id="mastery-global-fill" style="width:0%"></div></div>
 </div>
 
-<section class="study-plan" id="study-plan">
+<section class="study-plan" id="study-plan" style="display:none;">
   <div class="plan-card">
     <div class="plan-top">
       <div><div class="plan-title">🗓 Plan de hoy</div><div class="plan-date" id="plan-date"></div></div>
@@ -2149,6 +2151,7 @@ function startPlanReview(grupo) {
   onlyFailed = false;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.zone === 'todas'));
   document.getElementById('quiz-area').style.display = 'block';
+  document.getElementById('study-plan').style.display = 'none';
   document.getElementById('stats-area').style.display = 'none';
   document.getElementById('historial-area').style.display = 'none';
   startQuiz('todas');
@@ -2505,7 +2508,7 @@ function showCompleted() {
     renderStudyPlan();
   } else {
     const grupo = grupoFiltroActivo();
-    if (currentZone === 'todas' && grupo) scheduleTheme(grupo);
+    if (CURRENT_USER === 'Josep' && currentZone === 'todas' && grupo) scheduleTheme(grupo);
   }
 }
 
@@ -2838,21 +2841,31 @@ document.getElementById('tabs').addEventListener('click', e => {
   const quizArea = document.getElementById('quiz-area');
   const statsArea = document.getElementById('stats-area');
   const histArea = document.getElementById('historial-area');
+  const planArea = document.getElementById('study-plan');
 
-  if (zone === 'stats') {
+  if (zone === 'plan') {
+    quizArea.style.display = 'none';
+    statsArea.style.display = 'none';
+    histArea.style.display = 'none';
+    planArea.style.display = 'block';
+    renderStudyPlan();
+  } else if (zone === 'stats') {
     quizArea.style.display = 'none';
     statsArea.style.display = 'block';
     histArea.style.display = 'none';
+    planArea.style.display = 'none';
     renderStats();
   } else if (zone === 'historial') {
     quizArea.style.display = 'none';
     statsArea.style.display = 'none';
     histArea.style.display = 'block';
+    planArea.style.display = 'none';
     renderHistorial();
   } else {
     quizArea.style.display = 'block';
     statsArea.style.display = 'none';
     histArea.style.display = 'none';
+    planArea.style.display = 'none';
     onlyFailed = false;
     updateZoneFilterUI(zone);
     startQuiz(zone);
@@ -3099,8 +3112,14 @@ function enterApp(user) {
   document.getElementById('app').style.display = 'block';
   document.getElementById('switch-user-btn').textContent = '↩ ' + user;
   document.getElementById('motivational-phrase').textContent = getDailyPhrase();
-  bootstrapExistingThemes();
-  renderStudyPlan();
+  const usesPlan = user === 'Josep';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.zone === 'todas'));
+  document.getElementById('tab-plan').style.display = usesPlan ? '' : 'none';
+  document.getElementById('study-plan').style.display = 'none';
+  if (usesPlan) {
+    bootstrapExistingThemes();
+    renderStudyPlan();
+  }
   renderMastery();
   startQuiz('todas');
 }
