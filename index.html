@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Quiz Calles Valencia — Parques Bomberos</title>
+<title>Quiz Calles Valencia Temáticas</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -14,12 +14,13 @@
     --oeste: #10b36e;
     --campanar: #f0a500;
     --saler: #afb42b;
-    --bg: #0e0e12;
-    --surface: #17171f;
-    --surface2: #1e1e28;
-    --border: #2a2a38;
-    --text: #f0f0f5;
-    --muted: #6b6b80;
+    --theme: #a979ff;
+    --bg: #080b19;
+    --surface: #11172b;
+    --surface2: #18213a;
+    --border: #2d3d68;
+    --text: #f4f7ff;
+    --muted: #8190b8;
     --correct: #10b36e;
     --wrong: #e8420a;
   }
@@ -28,7 +29,10 @@
 
   body {
     font-family: 'Barlow Condensed', sans-serif;
-    background: var(--bg);
+    background:
+      radial-gradient(circle at 15% 0%, rgba(111, 66, 193, 0.22), transparent 34%),
+      radial-gradient(circle at 90% 15%, rgba(0, 188, 212, 0.12), transparent 28%),
+      var(--bg);
     color: var(--text);
     min-height: 100vh;
     overflow-x: hidden;
@@ -38,14 +42,16 @@
   #user-select-screen {
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh;
-    background: var(--bg);
+    background:
+      radial-gradient(circle at 50% 20%, rgba(111, 66, 193, 0.30), transparent 38%),
+      var(--bg);
   }
   .user-select-inner { text-align: center; }
   .user-select-title {
     font-size: 36px; font-weight: 900; letter-spacing: 0.05em;
     text-transform: uppercase; margin-bottom: 8px;
   }
-  .user-select-title span { color: var(--norte); }
+  .user-select-title span { color: var(--theme); }
   .user-select-sub {
     font-size: 20px; color: var(--muted); margin-bottom: 48px;
     letter-spacing: 0.1em; text-transform: uppercase;
@@ -62,9 +68,9 @@
     cursor: pointer; transition: all 0.2s;
   }
   .user-btn:hover {
-    border-color: var(--norte); color: var(--norte);
+    border-color: var(--theme); color: var(--theme);
     transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(232,66,10,0.2);
+    box-shadow: 0 8px 24px rgba(169,121,255,0.24);
   }
 
   /* HEADER RIGHT */
@@ -239,14 +245,14 @@
     padding: 16px 24px;
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0; z-index: 100;
-    background: rgba(14,14,18,0.95);
+    background: linear-gradient(90deg, rgba(17,23,43,0.97), rgba(24,33,58,0.97));
     backdrop-filter: blur(10px);
   }
   header h1 {
     font-size: 20px; font-weight: 900; letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  header h1 span { color: var(--norte); }
+  header h1 span { color: var(--theme); }
 
   .header-stats {
     display: flex; gap: 20px; align-items: center;
@@ -715,7 +721,7 @@
 <!-- USER SELECT SCREEN -->
 <div id="user-select-screen">
   <div class="user-select-inner">
-    <div class="user-select-title">Quiz <span>Calles</span> VLC</div>
+<div class="user-select-title">Quiz Calles Valencia <span>Temáticas</span></div>
     <div class="user-select-sub">¿Quién eres?</div>
     <div class="user-buttons">
       <button class="user-btn" data-user="Josep">Josep</button>
@@ -726,7 +732,7 @@
 
 <div id="app" style="display:none;">
 <header>
-  <h1>Quiz <span>Calles</span> VLC</h1>
+  <h1>Quiz Calles Valencia <span>Temáticas</span></h1>
   <div class="header-right">
     <div class="motivational" id="motivational-phrase"></div>
     <button class="switch-user-btn" id="switch-user-btn"></button>
@@ -1832,8 +1838,8 @@ function initLeafletMap() {
   if (leafletMap) return leafletMap;
   leafletMap = L.map('mapa-leaflet', { zoomControl: true }).setView([39.4699, -0.3763], 12);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap, © CARTO', maxZoom: 19
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
   }).addTo(leafletMap);
 
   const zoneLayer = L.layerGroup().addTo(leafletMap);
