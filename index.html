@@ -800,7 +800,6 @@
       <div class="calle-label">¿Qué parques corresponden?</div>
       <div class="calle-nombre" id="calle-nombre">—</div>
       <div class="calle-grupo" id="calle-grupo">—</div>
-      <div class="calle-hist" id="calle-hist"></div>
 
       <div class="mapa-section">
         <div class="mapa-body" id="mapa-body">
@@ -1989,7 +1988,8 @@ function saveStorage(data) {
 }
 
 let store = {};
-// store = { [calle]: { ok: N, fail: N, nota: '', aprendida: bool, manual: bool, porGrupo: {[grupo]: {ok,fail}} }, ... }
+// Los campos históricos siguen intactos. `recent` es una capa opcional y compatible.
+// store = { [calle]: { ok, fail, streak, nota, aprendida, manual, porGrupo, recent: [{ok,fecha,respuesta}] }, ... }
 
 function getRecord(calle) {
   if (!store[calle]) store[calle] = { ok: 0, fail: 0, streak: 0, nota: '', aprendida: false, manual: false, porGrupo: {} };
@@ -1997,7 +1997,46 @@ function getRecord(calle) {
   if (store[calle].aprendida === undefined) store[calle].aprendida = false;
   if (store[calle].manual === undefined) store[calle].manual = false;
   if (store[calle].porGrupo === undefined) store[calle].porGrupo = {};
+  if (!Array.isArray(store[calle].recent)) store[calle].recent = [];
   return store[calle];
+}
+
+function addRecentAttempt(rec, ok, respuesta) {
+  rec.recent.push({ ok: !!ok, fecha: new Date().toISOString(), respuesta: String(respuesta || '') });
+  rec.recent = rec.recent.slice(-10);
+}
+
+function repeatedConfusion(rec) {
+  const counts = {};
+  (rec.recent || []).filter(x => !x.ok && x.respuesta).forEach(x => {
+    counts[x.respuesta] = (counts[x.respuesta] || 0) + 1;
+  });
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return top && top[1] >= 2 ? { respuesta: top[0], veces: top[1] } : null;
+}
+
+function masteryScore(rec) {
+  const recent = (rec.recent || []).slice(-10);
+  const total = (rec.ok || 0) + (rec.fail || 0);
+  if (!total && !recent.length) return 0;
+  const historic = total ? (rec.ok || 0) / total : 0;
+  const weighted = recent.length
+    ? recent.reduce((sum, x, i) => sum + (x.ok ? i + 1 : 0), 0) /
+      recent.reduce((sum, x, i) => sum + i + 1, 0)
+    : historic;
+  const streakBonus = Math.min(rec.streak || 0, 5) * 3;
+  const confusionPenalty = repeatedConfusion(rec) ? 10 : 0;
+  return Math.max(0, Math.min(100, Math.round(historic * 30 + weighted * 55 + streakBonus - confusionPenalty)));
+}
+
+function reinforceReason(rec) {
+  const confusion = repeatedConfusion(rec);
+  if (confusion) return `Confusión repetida: ${confusion.respuesta} (${confusion.veces} veces)`;
+  const recentFails = (rec.recent || []).filter(x => !x.ok).length;
+  if (recentFails >= 2) return `${recentFails} fallos en los últimos ${(rec.recent || []).length} intentos`;
+  if (recentFails === 1) return 'Fallo reciente';
+  if ((rec.streak || 0) === 0 && (rec.fail || 0) > 0) return 'Racha interrumpida';
+  return 'Historial irregular';
 }
 
 // Devuelve el grupo temático activo SOLO si estamos en Todas/Repaso con un
@@ -2315,22 +2354,7 @@ function renderQuestion() {
   document.getElementById('mapa-fix').classList.remove('open');
   document.getElementById('mapa-fix-input').value = '';
 
-  // Historial (por temática si hay filtro de grupo activo; si no, el general)
   const rec = getRecord(e.calle);
-  const hist = document.getElementById('calle-hist');
-  const grupoActivo = grupoFiltroActivo();
-  if (grupoActivo) {
-    const gr = rec.porGrupo[grupoActivo];
-    if (gr && (gr.ok > 0 || gr.fail > 0)) {
-      hist.innerHTML = `Historial: <span class="ok">✓ ${gr.ok}</span>  <span class="fail">✗ ${gr.fail}</span>`;
-    } else {
-      hist.innerHTML = '';
-    }
-  } else if (rec.ok > 0 || rec.fail > 0) {
-    hist.innerHTML = `Historial: <span class="ok">✓ ${rec.ok}</span>  <span class="fail">✗ ${rec.fail}</span>`;
-  } else {
-    hist.innerHTML = '';
-  }
 
   // Nota
   const textarea = document.getElementById('nota-textarea');
@@ -2388,6 +2412,7 @@ function checkAnswer() {
   const isZoneMode = currentZone !== 'todas' && currentZone !== 'repaso';
 
   let correct = false;
+  let respuestaConcreta = '';
 
   const normalize = v => v.trim().toLowerCase();
 
@@ -2400,6 +2425,7 @@ function checkAnswer() {
     if (!apoyo.trim()) { selA.style.borderColor = 'var(--wrong)'; return; }
     const validApoyos = new Set(real.map(s => s[1].toLowerCase()));
     correct = validApoyos.has(normalize(apoyo));
+    respuestaConcreta = `${e.zone} → ${apoyo.trim()}`;
     selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
   } else {
     const p1 = selP.value;
@@ -2410,12 +2436,14 @@ function checkAnswer() {
       s[0].toLowerCase() === normalize(p1) &&
       s[1].toLowerCase() === normalize(p2)
     );
+    respuestaConcreta = `${p1.trim()} → ${p2.trim()}`;
     selP.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
     selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
   }
 
   // Save nota on answer
   rec.nota = document.getElementById('nota-textarea').value;
+  addRecentAttempt(rec, correct, respuestaConcreta);
 
   if (correct) {
     rec.ok++;
@@ -2427,6 +2455,10 @@ function checkAnswer() {
     rec.streak = 0;
     sessionFail++;
     showFeedback(false, e);
+    // Solo altera la cola de esta sesión, nunca el calendario espaciado.
+    const distance = 5 + Math.floor(Math.random() * 6);
+    const insertAt = Math.min(queue.length, qIndex + distance + 1);
+    queue.splice(insertAt, 0, e);
   }
 
   // Historial por temática: solo suma aquí si estamos estudiando con un
@@ -2477,6 +2509,15 @@ function showFeedback(ok, e) {
       }).slice(0, 4).map(s => `${s[0]} → ${s[1]}`).join(' / ');
     }
     document.getElementById('feedback-answer').textContent = '✓ Respuesta correcta: ' + combos;
+    const rec = getRecord(e.calle);
+    const confusion = repeatedConfusion(rec);
+    const recentFails = (rec.recent || []).filter(x => !x.ok).length;
+    if (confusion) {
+      document.getElementById('feedback-answer').textContent += ` · ⚠ Confusión habitual: ${confusion.respuesta}`;
+    }
+    if (recentFails >= 2 && (rec.nota || '').trim()) {
+      document.getElementById('feedback-answer').textContent += ` · 🧠 Tu anclaje: ${rec.nota.trim()}`;
+    }
   } else {
     document.getElementById('feedback-answer').textContent = '';
   }
@@ -2561,15 +2602,16 @@ function statsTableHTML(scope, grupo) {
     .filter(e => e.rec.fail > 0 || e.rec.ok > 0);
   if (scope && scope !== 'todas') { const z = capZone(scope); list = list.filter(e => e.zone === z); }
   if (grupo) list = list.filter(e => e.grupo === grupo);
-  list.sort((a, b) => b.rec.fail - a.rec.fail);
+  list = list.map(e => ({ ...e, dominio: masteryScore(e.rec) }))
+    .filter(e => e.dominio < 80 || (e.rec.recent || []).some(x => !x.ok));
+  list.sort((a, b) => a.dominio - b.dominio || b.rec.fail - a.rec.fail);
 
   const head = `<table class="stats-table"><thead><tr>
-      <th>Calle</th><th>Zona</th>
-      <th style="text-align:right">✗ Fallos</th><th style="text-align:right">✓ Aciertos</th>
+      <th>Calle</th><th>Zona</th><th style="text-align:right">Dominio</th><th>Motivo / confusión</th>
     </tr></thead><tbody>`;
 
   if (!list.length) {
-    return head + '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Aún no hay datos aquí. ¡A practicar!</td></tr></tbody></table>';
+    return head + '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No hay calles que necesiten refuerzo aquí.</td></tr></tbody></table>';
   }
   const maxFail = list[0]?.rec.fail || 1;
   const rows = list.slice(0, 100).map(e => {
@@ -2580,8 +2622,8 @@ function statsTableHTML(scope, grupo) {
     return `<tr>
       <td><span class="bar-mini" style="width:${barW}px"></span> ${e.calle} ${streakLabel}</td>
       <td><span class="badge-parque ${badgeClass}">${e.zone}</span></td>
-      <td style="text-align:right"><span class="fail-count">${e.rec.fail}</span></td>
-      <td style="text-align:right"><span class="ok-count">${e.rec.ok}</span></td>
+      <td style="text-align:right"><strong>${e.dominio}%</strong></td>
+      <td>${escPlan(reinforceReason(e.rec))}</td>
     </tr>`;
   }).join('');
   return head + rows + '</tbody></table>';
@@ -2593,7 +2635,7 @@ function renderStats() {
   host.innerHTML = parques.map(p => {
     const scope = p.toLowerCase();
     return `<div class="collapsible" data-scope="${scope}">
-      <div class="collapsible-head"><span class="arrow">▶</span> <span class="badge-parque badge-${scope}">${p}</span> Calles con más fallos</div>
+      <div class="collapsible-head"><span class="arrow">▶</span> <span class="badge-parque badge-${scope}">${p}</span> Calles a reforzar</div>
       <div class="collapsible-body">
         <div data-stats-host></div>
       </div>
@@ -2756,7 +2798,7 @@ function renderBelowQuiz() {
   const label = grupo ? ' de «' + grupo + '»' : (scope === 'todas' ? '' : ' de ' + capZone(scope));
   document.getElementById('below-quiz').innerHTML = `
     <div class="collapsible" data-scope="${scope}">
-      <div class="collapsible-head"><span class="arrow">▶</span> 📊 Calles con más fallos${label}</div>
+      <div class="collapsible-head"><span class="arrow">▶</span> 🧠 Calles a reforzar${label}</div>
       <div class="collapsible-body"><div data-stats-host></div></div>
     </div>`;
   document.querySelector('#below-quiz .collapsible').dataset.grupo = grupo || '';
