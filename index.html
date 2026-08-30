@@ -735,6 +735,9 @@
   <h1>Quiz Calles Valencia <span>Temáticas</span></h1>
   <div class="header-right">
     <div class="motivational" id="motivational-phrase"></div>
+    <button class="switch-user-btn" id="backup-export-btn" title="Guardar progreso, planes y ajustes">⬇ Copia</button>
+    <button class="switch-user-btn" id="backup-import-btn" title="Recuperar una copia sin borrar lo actual">⬆ Recuperar</button>
+    <input type="file" id="backup-file-input" accept=".json,.txt,application/json,text/plain" hidden>
     <button class="switch-user-btn" id="switch-user-btn"></button>
   </div>
 </header>
@@ -1981,8 +1984,79 @@ async function researchCoord() {
 // ============================================================
 let CURRENT_USER = '';
 const LS_KEY_PREFIX = 'quiz_calles_vlc_v2_';
+const BACKUP_FORMAT = 'quiz_calles_vlc_backup_v1';
 
 function getLSKey() { return LS_KEY_PREFIX + CURRENT_USER; }
+
+function parseJSONStorage(key) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function usefulRecord(rec) {
+  return !!rec && typeof rec === 'object' && (Number(rec.ok)>0 || Number(rec.fail)>0 || Number(rec.streak)>0 ||
+    !!rec.nota || !!rec.aprendida || !!rec.manual || !!rec.revisada || !!rec.pendingFail ||
+    (Array.isArray(rec.recent) && rec.recent.length) || (rec.porGrupo && Object.keys(rec.porGrupo).length));
+}
+function streetId(name) {
+  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .replace(/^(CARRER|CALLE|C\/|C\.|C |AVINGUDA|AVENIDA|AVDA\.?|AV |PLACA|PLAZA|PL |PASSEIG|PASEO|PG |CAMI|CAMINO|CARRETERA|CTRA)\s*/i, '')
+    .replace(/\b(DE LA|DEL|DE L|DE|LA|EL|D|L)\b/g, ' ').replace(/[^A-Z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+function mergeRecent(current, incoming) {
+  const out=[]; const seen=new Set();
+  [...(Array.isArray(current)?current:[]), ...(Array.isArray(incoming)?incoming:[])].forEach(x => {
+    if (!x || typeof x !== 'object') return;
+    const id=`${x.fecha||''}|${!!x.ok}|${x.respuesta||''}`;
+    if (!seen.has(id)) { seen.add(id); out.push(x); }
+  });
+  return out.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))).slice(-50);
+}
+function mergeRecord(current={}, incoming={}) {
+  const out={...incoming,...current};
+  ['ok','fail','streak'].forEach(k => { out[k]=Math.max(Number(current[k])||0, Number(incoming[k])||0); });
+  ['aprendida','manual','revisada','pendingFail'].forEach(k => { out[k]=!!current[k]||!!incoming[k]; });
+  out.nota=current.nota||incoming.nota||'';
+  out.recent=mergeRecent(current.recent,incoming.recent);
+  out.porGrupo={...(incoming.porGrupo||{})};
+  Object.entries(current.porGrupo||{}).forEach(([g,rec]) => { out.porGrupo[g]=mergeRecord(rec,out.porGrupo[g]||{}); });
+  return out;
+}
+function mergeProgress(current, incoming) {
+  const out={...(current||{})}; const byId=new Map(Object.keys(out).map(k=>[streetId(k),k]));
+  Object.entries(incoming||{}).forEach(([oldName,rec]) => {
+    if (!usefulRecord(rec)) return;
+    const target=byId.get(streetId(oldName))||oldName;
+    out[target]=mergeRecord(out[target]||{},rec); byId.set(streetId(target),target);
+  });
+  return out;
+}
+function mergePlanItem(current={}, incoming={}) {
+  const cs=Number(current.stage)||0, is=Number(incoming.stage)||0, higher=is>cs?incoming:current;
+  const out={...incoming,...current,stage:Math.max(cs,is)};
+  out.startedOn=[current.startedOn,incoming.startedOn].filter(Boolean).sort()[0]||undefined;
+  out.lastDone=[current.lastDone,incoming.lastDone].filter(Boolean).sort().pop()||undefined;
+  out.due=higher.due||current.due||incoming.due; out.done=!!current.done||!!incoming.done; out.imported=!!current.imported||!!incoming.imported;
+  return Object.fromEntries(Object.entries(out).filter(([,v])=>v!==undefined));
+}
+function mergePlan(current,incoming) {
+  const out={...(current||{})}; Object.entries(incoming||{}).forEach(([n,item])=>{if(item&&typeof item==='object')out[n]=mergePlanItem(out[n]||{},item);}); return out;
+}
+function storageKeys() {
+  const keys=[]; try { for(let i=0;i<localStorage.length;i++) keys.push(localStorage.key(i)); } catch {} return keys.filter(Boolean);
+}
+function migrateUserData(user) {
+  const targetKey=LS_KEY_PREFIX+user; let progress=parseJSONStorage(targetKey)||{};
+  storageKeys().filter(k=>k!==targetKey&&(k===`quiz_valencia_2500_v1_PROGRESS_${user}`||k===`quiz_calles_vlc_v1_${user}`||k===`quiz_calles_vlc_v3_${user}`))
+    .forEach(k=>{progress=mergeProgress(progress,parseJSONStorage(k));});
+  try { if(Object.keys(progress).length)localStorage.setItem(targetKey,JSON.stringify(progress)); } catch {}
+  const themeTarget=`quiz_calles_vlc_v2_PLAN_${user}`; let themePlan=parseJSONStorage(themeTarget)||{};
+  storageKeys().filter(k=>k!==themeTarget&&new RegExp(`^quiz_calles_vlc_v[13]_PLAN_${user}$`).test(k)).forEach(k=>{themePlan=mergePlan(themePlan,parseJSONStorage(k));});
+  try { if(Object.keys(themePlan).length)localStorage.setItem(themeTarget,JSON.stringify(themePlan)); } catch {}
+  const streetTarget=`quiz_calles_vlc_v2_STREET_PLAN_${user}`; let streetPlan=parseJSONStorage(streetTarget)||{};
+  storageKeys().filter(k=>k!==streetTarget&&(k===`quiz_valencia_2500_v1_STREET_PLAN_${user}`||(/^quiz_calles_vlc_v\d+_STREET_PLAN_/.test(k)&&k.endsWith(`_${user}`))))
+    .forEach(k=>{streetPlan=mergePlan(streetPlan,parseJSONStorage(k));});
+  try { if(Object.keys(streetPlan).length)localStorage.setItem(streetTarget,JSON.stringify(streetPlan)); } catch {}
+  return progress;
+}
 
 function loadStorage() {
   try {
@@ -2129,8 +2203,10 @@ function bootstrapExistingThemes() {
   try { seededVersion = Number(localStorage.getItem(seedKey) || 0); } catch {}
   if (seededVersion < PLAN_SEED_VERSION) {
     Object.entries(KNOWN_THEME_DATES).forEach(([g, startedOn]) => {
-      const stage = currentSeedStage(startedOn);
-      plan[g] = { startedOn, stage, due: planDue(startedOn, stage), done:false, imported:true };
+      if (!plan[g]) {
+        const stage = currentSeedStage(startedOn);
+        plan[g] = { startedOn, stage, due: planDue(startedOn, stage), done:false, imported:true };
+      }
     });
     try { localStorage.setItem(seedKey, String(PLAN_SEED_VERSION)); } catch {}
     changed = true;
@@ -2874,6 +2950,63 @@ function importData(text) {
   alert('Importado y fusionado correctamente.');
 }
 
+function buildFullBackup() {
+  const values = {};
+  storageKeys().filter(k => /^(quiz_calles_vlc_|quiz_valencia_2500_|quiz_extra_|quiz_fallos|qv_)/.test(k))
+    .forEach(k => { try { values[k] = localStorage.getItem(k); } catch {} });
+  return { format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), activeUser: CURRENT_USER, values };
+}
+
+function exportFullBackup() {
+  const payload = buildFullBackup();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `backup_calles_valencia_${CURRENT_USER}_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function parseLegacyStorageText(text) {
+  const values = {};
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const tab = line.indexOf('\t'); if (tab < 1) return;
+    const key = line.slice(0, tab).trim(); const value = line.slice(tab + 1).trim();
+    if (key && value) values[key] = value;
+  });
+  return values;
+}
+
+function importFullBackupText(text) {
+  let parsed = null; try { parsed = JSON.parse(text); } catch {}
+  const values = parsed && parsed.format === BACKUP_FORMAT && parsed.values ? parsed.values : parseLegacyStorageText(text);
+  if (!values || !Object.keys(values).length) { alert('No se reconoce este archivo de copia.'); return; }
+  let accepted = 0;
+  Object.entries(values).forEach(([key, raw]) => {
+    if (!/^(quiz_calles_vlc_|quiz_valencia_2500_|quiz_extra_|quiz_fallos|qv_)/.test(key) || typeof raw !== 'string') return;
+    let incoming; try { incoming = JSON.parse(raw); } catch { return; }
+    const current = parseJSONStorage(key);
+    let merged = incoming;
+    if (current && typeof current === 'object' && incoming && typeof incoming === 'object') {
+      if (/(_PROGRESS_|^quiz_calles_vlc_v\d+_(Josep|Tudón)$)/.test(key)) merged = mergeProgress(current, incoming);
+      else if (/_PLAN_|_STREET_PLAN_/.test(key)) merged = mergePlan(current, incoming);
+      else if (!Array.isArray(current) && !Array.isArray(incoming)) merged = { ...incoming, ...current };
+      else if (Array.isArray(current) && Array.isArray(incoming)) merged = [...current, ...incoming];
+    }
+    try { localStorage.setItem(key, JSON.stringify(merged)); accepted++; } catch {}
+  });
+  store = migrateUserData(CURRENT_USER);
+  if (CURRENT_USER === 'Josep') { bootstrapExistingThemes(); renderStudyPlan(); }
+  renderMastery(); startQuiz('todas');
+  alert(`Copia recuperada y fusionada (${accepted} bloques). No se ha borrado ningún dato existente.`);
+}
+
+document.getElementById('backup-export-btn').addEventListener('click', exportFullBackup);
+document.getElementById('backup-import-btn').addEventListener('click', () => document.getElementById('backup-file-input').click());
+document.getElementById('backup-file-input').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0]; if (!file) return;
+  try { importFullBackupText(await file.text()); } catch { alert('No se pudo leer la copia.'); }
+  e.target.value = '';
+});
+
 // ============================================================
 // EVENTS
 // ============================================================
@@ -3155,7 +3288,7 @@ function getDailyPhrase() {
 // ============================================================
 function enterApp(user) {
   CURRENT_USER = user;
-  store = loadStorage();
+  store = migrateUserData(user);
   document.getElementById('user-select-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('switch-user-btn').textContent = '↩ ' + user;
