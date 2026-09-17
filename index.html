@@ -431,7 +431,17 @@
   }
   .calle-grupo {
     font-size: 13px; color: var(--muted); font-style: italic;
-    margin-bottom: 24px;
+    margin-bottom: 10px;
+  }
+  .multi-answer-warning {
+    display: none; width: fit-content; margin: 0 auto 20px;
+    padding: 6px 10px; border-radius: 8px;
+    border: 1px solid rgba(240,165,0,.55);
+    background: rgba(240,165,0,.1); color: var(--campanar);
+    font-size: 13px; font-weight: 700;
+  }
+  .multi-answer-warning.show {
+    display: block;
   }
 
   .card-actions {
@@ -809,6 +819,7 @@
       <div class="calle-label">¿Qué parques corresponden?</div>
       <div class="calle-nombre" id="calle-nombre">—</div>
       <div class="calle-grupo" id="calle-grupo">—</div>
+      <div class="multi-answer-warning" id="multi-answer-warning"></div>
 
       <div class="mapa-section">
         <div class="mapa-body" id="mapa-body">
@@ -2138,6 +2149,8 @@ let currentZone = 'todas';
 let onlyFailed = false;
 let queue = [];
 let activePlanReviewGroup = null;
+let persistentAllQueueState = null;
+let persistentAllQueueActive = false;
 
 // ============================================================
 // CALENDARIO DE REPASO POR TEMÁTICAS (+1, +3, +7, +10 días)
@@ -2251,7 +2264,7 @@ function renderStudyPlan() {
   } else {
     host.innerHTML = due.map(([g,x]) => {
       const overdue = x.due < now;
-      const count = ALL_ENTRIES.filter(e => e.grupo === g).length;
+      const count = uniqueStreetEntries(ALL_ENTRIES.filter(e => e.grupo === g)).length;
       const label = overdue ? `Atrasado desde ${x.due.split('-').reverse().slice(0,2).join('/')}` : `Repaso +${planOffset(x.stage)} días`;
       return `<div class="plan-item ${overdue ? 'overdue' : ''}">
         <div class="plan-item-info"><div class="plan-item-name">${escPlan(g)}</div><div class="plan-item-meta">${label} · ${count} calles</div></div>
@@ -2299,9 +2312,9 @@ function setGrupoSel(zone, grupo) {
 }
 function populateGrupoSelect() {
   const counts = {};
-  ALL_ENTRIES.forEach(e => { counts[e.grupo] = (counts[e.grupo] || 0) + 1; });
+  GRUPOS.forEach(g => { counts[g] = uniqueStreetEntries(ALL_ENTRIES.filter(e => e.grupo === g)).length; });
   const sel = document.getElementById('grupo-filter-select');
-  sel.innerHTML = `<option value="todas">Todos los grupos (${ALL_ENTRIES.length})</option>` +
+  sel.innerHTML = `<option value="todas">Todos los grupos (${uniqueStreetEntries(ALL_ENTRIES).length})</option>` +
     GRUPOS.map(g => `<option value="${g.replace(/"/g, '&quot;')}">${g} (${counts[g] || 0})</option>`).join('');
 }
 function updateGrupoFilterUI(zone) {
@@ -2317,22 +2330,53 @@ let sessionOk = 0;
 let sessionFail = 0;
 
 function isFailedRec(r) {
-  return !!(r && r.fail > 0 && (r.streak || 0) < 5);
+  if (!r) return false;
+  // Compatibilidad: los registros antiguos, que no tienen pendingFail,
+  // conservan exactamente el criterio de Repaso que usaban hasta ahora.
+  if (typeof r.pendingFail === 'boolean') return r.pendingFail;
+  return r.fail > 0 && (r.streak || 0) < 5;
+}
+
+function uniqueStreetEntries(list) {
+  const seen = new Set();
+  return list.filter(e => {
+    if (seen.has(e.calle)) return false;
+    seen.add(e.calle);
+    return true;
+  });
+}
+
+function validStreetAnswers(calle) {
+  const seen = new Set();
+  const answers = [];
+  ALL_ENTRIES.filter(e => e.calle === calle).forEach(e => {
+    e.salidas.filter(s => s[0] === e.zone).forEach(s => {
+      const id = s[0] + '|||' + s[1];
+      if (!seen.has(id)) { seen.add(id); answers.push(s); }
+    });
+  });
+  return answers;
+}
+
+function validAnswersForQuestion(e) {
+  return (currentZone === 'todas' || currentZone === 'repaso')
+    ? validStreetAnswers(e.calle)
+    : e.salidas.filter(s => s[0] === e.zone);
 }
 
 function getFilteredEntries(zone) {
   if (zone === 'todas') {
     let list = [...ALL_ENTRIES];
-    if (activePlanReviewGroup) return list.filter(e => e.grupo === activePlanReviewGroup);
+    if (activePlanReviewGroup) return uniqueStreetEntries(list.filter(e => e.grupo === activePlanReviewGroup));
     const g = getGrupoSel('todas');
     if (g !== 'todas') list = list.filter(e => e.grupo === g);
-    return list;
+    return uniqueStreetEntries(list);
   }
   if (zone === 'repaso') {
     let list = ALL_ENTRIES.filter(e => isFailedRec(store[e.calle]));
     const g = getGrupoSel('repaso');
     if (g !== 'todas') list = list.filter(e => e.grupo === g);
-    return list;
+    return uniqueStreetEntries(list);
   }
   const z = zone.charAt(0).toUpperCase() + zone.slice(1);
   let list = ALL_ENTRIES.filter(e => e.zone === z);
@@ -2361,6 +2405,41 @@ function shuffle(arr) {
   return a;
 }
 
+// Cola persistente de "Todas > Todos los grupos". Se guarda aparte del
+// progreso para no alterar ninguna clave ni ningún dato ya existente.
+function allQueueKey() { return 'quiz_calles_vlc_v2_QUEUE_' + CURRENT_USER; }
+function allQueueEntryId(e) { return e.calle; }
+function entryVariantId(e) { return e.calle + '|||' + e.origZone; }
+function normalizeSavedQueueId(id) { return String(id || '').split('|||')[0]; }
+
+function persistentAllEntries(entries) {
+  const byId = new Map(entries.map(e => [allQueueEntryId(e), e]));
+  const saved = parseJSONStorage(allQueueKey());
+  const savedOrder = saved && Array.isArray(saved.order) ? saved.order : [];
+  const seen = new Set();
+  const order = [];
+
+  savedOrder.map(normalizeSavedQueueId).forEach(id => {
+    if (byId.has(id) && !seen.has(id)) { seen.add(id); order.push(id); }
+  });
+  shuffle(entries.filter(e => !seen.has(allQueueEntryId(e)))).forEach(e => {
+    const id = allQueueEntryId(e);
+    seen.add(id);
+    order.push(id);
+  });
+
+  persistentAllQueueState = { version: 2, order };
+  return order.map(id => byId.get(id)).filter(Boolean);
+}
+
+function advancePersistentAllQueue(e) {
+  if (!persistentAllQueueActive || !persistentAllQueueState) return;
+  const id = allQueueEntryId(e);
+  persistentAllQueueState.order = persistentAllQueueState.order.filter(x => x !== id);
+  persistentAllQueueState.order.push(id);
+  try { localStorage.setItem(allQueueKey(), JSON.stringify(persistentAllQueueState)); } catch {}
+}
+
 function startQuiz(zone) {
   currentZone = zone;
   updateGrupoFilterUI(zone);
@@ -2368,6 +2447,8 @@ function startQuiz(zone) {
   renderMastery();
   document.getElementById('plan-review-badge').classList.toggle('show', !!activePlanReviewGroup);
   const entries = getFilteredEntries(zone);
+  persistentAllQueueActive = zone === 'todas' && !activePlanReviewGroup && getGrupoSel('todas') === 'todas';
+  if (!persistentAllQueueActive) persistentAllQueueState = null;
   if (!entries.length) {
     document.getElementById('quiz-card').style.display = 'none';
     document.getElementById('completed-card').classList.remove('show');
@@ -2389,7 +2470,7 @@ function startQuiz(zone) {
     return;
   }
   document.getElementById('empty-state-card').style.display = 'none';
-  queue = shuffle(entries);
+  queue = persistentAllQueueActive ? persistentAllEntries(entries) : shuffle(entries);
   qIndex = 0;
   answered = false;
   sessionOk = 0;
@@ -2425,6 +2506,11 @@ function renderQuestion() {
   document.getElementById('calle-nombre').innerHTML =
     e.calle + (e.modified ? '<span class="mod-badge">modificada</span>' : '');
   document.getElementById('calle-grupo').textContent = (activePlanReviewGroup || e.grupo === 'Calles del Saler') ? '' : e.grupo;
+  const multiWarning = document.getElementById('multi-answer-warning');
+  const validAnswers = validAnswersForQuestion(e);
+  const showMultiWarning = (currentZone === 'todas' || currentZone === 'repaso') && validAnswers.length > 1;
+  multiWarning.textContent = showMultiWarning ? `⚠ Esta calle admite ${validAnswers.length} respuestas válidas` : '';
+  multiWarning.classList.toggle('show', showMultiWarning);
 
   // cerrar panel de modificación al cambiar de calle
   document.getElementById('modify-panel').classList.remove('open');
@@ -2498,9 +2584,9 @@ function checkAnswer() {
 
   const normalize = v => v.trim().toLowerCase();
 
-  // Solo son válidas las combinaciones cuyo primer parque coincide con la
-  // zona de la calle. El orden primera salida → apoyo es estricto.
-  const real = e.salidas.filter(s => s[0] === e.zone);
+  // En Todas/Repaso se aceptan todas las combinaciones registradas para el
+  // mismo nombre. En cada parque se mantiene la respuesta propia de la zona.
+  const real = validAnswersForQuestion(e);
 
   if (isZoneMode) {
     const apoyo = selA.value;
@@ -2530,15 +2616,19 @@ function checkAnswer() {
   if (correct) {
     rec.ok++;
     rec.streak = (rec.streak || 0) + 1;
+    if (currentZone === 'repaso') rec.pendingFail = false;
+    advancePersistentAllQueue(e);
     sessionOk++;
     showFeedback(true, e);
   } else {
     rec.fail++;
     rec.streak = 0;
+    rec.pendingFail = true;
+    rec.pendingFailEntry = entryVariantId(e);
     sessionFail++;
     showFeedback(false, e);
     // Solo altera la cola de esta sesión, nunca el calendario espaciado.
-    const distance = 5 + Math.floor(Math.random() * 6);
+    const distance = 3 + Math.floor(Math.random() * 2);
     const insertAt = Math.min(queue.length, qIndex + distance + 1);
     queue.splice(insertAt, 0, e);
   }
@@ -2571,10 +2661,9 @@ function showFeedback(ok, e) {
   bar.className = 'feedback-bar show ' + (ok ? 'correct' : 'wrong');
   document.getElementById('feedback-icon').textContent = ok ? '✓' : '✗';
   document.getElementById('feedback-text').textContent = ok ? '¡Correcto!' : 'Incorrecto';
+  const isZoneMode = currentZone !== 'todas' && currentZone !== 'repaso';
+  const real = validAnswersForQuestion(e);
   if (!ok) {
-    const isZoneMode = currentZone !== 'todas' && currentZone !== 'repaso';
-    // Solo las combinaciones reales (donde el 1º parque es el de origen de la calle).
-    const real = e.salidas.filter(s => s[0] === e.zone);
 
     let combos;
     if (isZoneMode) {
@@ -2600,6 +2689,9 @@ function showFeedback(ok, e) {
     if (recentFails >= 2 && (rec.nota || '').trim()) {
       document.getElementById('feedback-answer').textContent += ` · 🧠 Tu anclaje: ${rec.nota.trim()}`;
     }
+  } else if (!isZoneMode && real.length > 1) {
+    document.getElementById('feedback-answer').textContent =
+      '✓ Respuestas válidas: ' + real.map(s => `${s[0]} → ${s[1]}`).join(' / ');
   } else {
     document.getElementById('feedback-answer').textContent = '';
   }
@@ -2648,6 +2740,7 @@ function computeMastery(zone) {
     const z = capZone(zone);
     list = list.filter(e => e.zone === z);
   }
+  list = uniqueStreetEntries(list);
   const total = list.length;
   const learned = list.filter(e => getRecord(e.calle).aprendida).length;
   const pct = total ? Math.round((learned / total) * 100) : 0;
@@ -2684,6 +2777,7 @@ function statsTableHTML(scope, grupo) {
     .filter(e => e.rec.fail > 0 || e.rec.ok > 0);
   if (scope && scope !== 'todas') { const z = capZone(scope); list = list.filter(e => e.zone === z); }
   if (grupo) list = list.filter(e => e.grupo === grupo);
+  list = uniqueStreetEntries(list);
   list = list.map(e => ({ ...e, dominio: masteryScore(e.rec) }))
     .filter(e => e.dominio < 80 || (e.rec.recent || []).some(x => !x.ok));
   list.sort((a, b) => a.dominio - b.dominio || b.rec.fail - a.rec.fail);
