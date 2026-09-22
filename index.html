@@ -103,6 +103,13 @@
     cursor: pointer; transition: all 0.15s;
   }
   .btn-modify:hover { border-color: var(--campanar); color: var(--campanar); }
+  .btn-delete {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-delete:hover { border-color: var(--wrong); color: var(--wrong); }
   .mod-badge {
     display: inline-block; font-size: 11px; font-weight: 700;
     letter-spacing: 0.05em; text-transform: uppercase;
@@ -151,6 +158,10 @@
     font-family: 'Barlow Condensed', sans-serif;
   }
   .btn-mod-revert:hover { color: var(--wrong); }
+  .mod-answer-row { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; margin-bottom:10px; align-items:end; }
+  .mod-remove-answer { width:34px; height:40px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--wrong); cursor:pointer; }
+  .mod-add-answer { margin:0 0 12px; border:1px dashed var(--campanar); background:transparent; color:var(--campanar); border-radius:8px; padding:7px 12px; cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-weight:700; }
+  @media (max-width:560px) { .mod-answer-row { grid-template-columns:1fr; } .mod-remove-answer { width:100%; } }
 
   /* HISTORIAL VIEW */
   #historial-area { display: none; }
@@ -284,6 +295,7 @@
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--text); }
   .tab[data-zone="todas"].active { border-color: var(--text); }
+  .tab[data-zone="no-aprendidas"].active { border-color: var(--wrong); color: var(--wrong); }
   .tab[data-zone="norte"].active { border-color: var(--norte); color: var(--norte); }
   .tab[data-zone="central"].active { border-color: var(--central); color: var(--central); }
   .tab[data-zone="oeste"].active { border-color: var(--oeste); color: var(--oeste); }
@@ -587,6 +599,19 @@
   }
   .parque-select:focus { outline: none; border-color: var(--muted); }
   .parque-select::placeholder { color: var(--muted); font-size: 14px; font-weight: 400; }
+  .answer-mode-switch { display:flex; justify-content:center; gap:8px; margin:0 0 14px; }
+  .answer-mode-btn { border:1px solid var(--border); background:var(--surface2); color:var(--muted); border-radius:999px; padding:6px 14px; cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase; }
+  .answer-mode-btn.active { border-color:var(--text); background:var(--text); color:var(--bg); }
+  .answer-buttons { display:none; }
+  .answer-button-group { margin-bottom:12px; }
+  .answer-button-label { display:block; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .park-buttons { display:grid; grid-template-columns:repeat(5,1fr); gap:7px; }
+  .park-answer-btn { padding:10px 5px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:700; }
+  .park-answer-btn.selected { border-color:var(--central); background:rgba(10,123,232,.15); }
+  .park-answer-btn.correct { border-color:var(--correct); background:rgba(16,179,110,.16); }
+  .park-answer-btn.wrong { border-color:var(--wrong); background:rgba(232,66,10,.14); }
+  .answer-button-group.missing .park-answer-btn { border-color:var(--wrong); }
+  @media (max-width:560px) { .park-buttons { grid-template-columns:repeat(3,1fr); } }
 
   /* estado correcto/incorrecto */
   .parque-select.correct { border-color: var(--correct) !important; background-color: rgba(16,179,110,0.08); }
@@ -754,6 +779,7 @@
 
 <div class="tabs" id="tabs">
   <div class="tab active" data-zone="todas">Todas<span class="tab-pct" id="pct-todas"></span></div>
+  <div class="tab" data-zone="no-aprendidas">No aprendidas<span class="tab-pct" id="count-no-aprendidas"></span></div>
   <div class="tab" data-zone="norte">Norte<span class="tab-pct" id="pct-norte"></span></div>
   <div class="tab" data-zone="central">Central<span class="tab-pct" id="pct-central"></span></div>
   <div class="tab" data-zone="oeste">Oeste<span class="tab-pct" id="pct-oeste"></span></div>
@@ -815,6 +841,7 @@
         <button id="btn-maps" class="btn-icon" type="button" title="Ver mapa de zonas">📍</button>
         <button id="btn-aprendida" class="btn-aprendida" type="button">⬜ Aprendida</button>
         <button id="btn-modify" class="btn-modify" type="button">✎ Modificar</button>
+        <button id="btn-delete" class="btn-delete" type="button">Eliminar</button>
       </div>
       <div class="calle-label">¿Qué parques corresponden?</div>
       <div class="calle-nombre" id="calle-nombre">—</div>
@@ -852,37 +879,51 @@
       </div>
 
       <div class="respuesta-section">
-        <div class="respuesta-row" id="respuesta-row">
-          <div class="input-group">
-            <label>1ª Salida</label>
-            <input type="text" class="parque-select" id="sel-primero" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
+        <div class="answer-mode-switch" id="answer-mode-switch">
+          <button type="button" class="answer-mode-btn" data-answer-mode="text">Escribir</button>
+          <button type="button" class="answer-mode-btn" data-answer-mode="buttons">Botones</button>
+        </div>
+        <div id="respuesta-escrita">
+          <div class="respuesta-row" id="respuesta-row">
+            <div class="input-group">
+              <label>1ª Salida</label>
+              <input type="text" class="parque-select" id="sel-primero" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
+            </div>
+            <div class="input-group" id="grupo-apoyo">
+              <label>Parque de Apoyo</label>
+              <input type="text" class="parque-select" id="sel-apoyo" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
+            </div>
           </div>
-          <div class="input-group" id="grupo-apoyo">
-            <label>Parque de Apoyo</label>
-            <input type="text" class="parque-select" id="sel-apoyo" placeholder="Norte / Central / Oeste / Campanar / Saler" autocomplete="off">
+        </div>
+        <div class="answer-buttons" id="respuesta-botones">
+          <div class="answer-button-group" id="button-group-p1">
+            <span class="answer-button-label">1ª Salida</span>
+            <div class="park-buttons" data-answer-slot="p1"></div>
+          </div>
+          <div class="answer-button-group" id="button-group-p2">
+            <span class="answer-button-label" id="button-label-p2">Parque de Apoyo</span>
+            <div class="park-buttons" data-answer-slot="p2"></div>
           </div>
         </div>
       </div>
 
       <div id="modify-panel">
-        <div class="mod-title">Modificar salidas de esta calle</div>
+        <div class="mod-title">Modificar esta calle</div>
         <div class="mod-row">
           <div class="input-group">
-            <label>Nueva 1ª Salida</label>
-            <input type="text" class="mod-input" id="mod-p1" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar / Saler">
-          </div>
-          <div class="input-group">
-            <label>Nueva 2ª Salida</label>
-            <input type="text" class="mod-input" id="mod-p2" list="zonas-list" autocomplete="off" placeholder="Norte / Central / Oeste / Campanar / Saler">
+            <label>Nombre de la calle</label>
+            <input type="text" class="mod-input" id="mod-calle" autocomplete="off">
           </div>
         </div>
+        <div id="mod-answers-list"></div>
+        <button type="button" class="mod-add-answer" id="btn-mod-add-answer">+ Añadir otra respuesta</button>
         <div class="mod-actions">
           <button type="button" class="btn-mod-save" id="btn-mod-save">Guardar</button>
           <button type="button" class="btn-mod-cancel" id="btn-mod-cancel">Cancelar</button>
           <button type="button" class="btn-mod-revert" id="btn-mod-revert" style="display:none">↺ Revertir a original</button>
         </div>
       </div>
-      <datalist id="zonas-list">
+
         <option value="Norte"></option>
         <option value="Central"></option>
         <option value="Oeste"></option>
@@ -1727,6 +1768,7 @@ function parseData(raw) {
 }
 
 const ALL_ENTRIES = parseData(RAW);
+const SHEET_EXTRA_ANSWERS = {"Av Cid":[["Oeste","Central"],["Oeste","Campanar"]],"Av Constitucion":[["Norte","Campanar"],["Campanar","Norte"]],"Av Doctor Tomas Sala":[["Central","Oeste"],["Oeste","Central"]],"Av Dr Peset Aleixandre":[["Norte","Campanar"],["Campanar","Norte"]],"Av Giorgeta":[["Central","Oeste"],["Oeste","Central"]],"Av Hermanos Machado":[["Norte","Campanar"],["Campanar","Oeste"]],"Av Navarro Reverter":[["Norte","Central"],["Central","Norte"]],"Av Puerto":[["Norte","Central"],["Central","Norte"]],"C Almazora":[["Norte","Central"],["Norte","Campanar"]],"C Barcas":[["Norte","Central"],["Central","Norte"]],"C Colon":[["Norte","Central"],["Central","Norte"]],"C de Caballeros":[["Norte","Oeste"],["Oeste","Norte"]],"C Denia":[["Central","Oeste"],["Central","Norte"]],"C Don Juan de Austria":[["Norte","Central"],["Central","Norte"]],"C Eixarch":[["Oeste","Central"],["Oeste","Campanar"]],"C Mauro Guillén":[["Campanar","Oeste"],["Campanar","Norte"]],"C Molinell":[["Norte","Central"],["Norte","Campanar"]],"C San Vicente":[["Norte","Central"],["Central","Oeste"],["Central","Norte"],["Oeste","Central"]],"Camino Moncada":[["Norte","Campanar"],["Campanar","Norte"]],"Paseo Alameda":[["Norte","Central"],["Central","Norte"]],"Pte Mar":[["Norte","Central"],["Central","Norte"]],"Pte Serranos":[["Norte","Campanar"],["Norte","Central"],["Oeste","Norte"]],"Pza Manises":[["Norte","Central"],["Oeste","Norte"]],"V30":[["Oeste","Central"],["Oeste","Campanar"],["Central","Oeste"],["Central","Saler"]],"Pza América":[["Norte","Central"],["Central","Norte"]],"Pz America":[["Norte","Central"],["Central","Norte"]],"Pza America":[["Norte","Central"],["Central","Norte"]],"C Angel Villena":[["Central","Oeste"],["Central","Norte"]],"Pza Virgen":[["Oeste","Norte"],["Norte","Central"]],"C Palleter":[["Oeste","Central"],["Oeste","Campanar"]],"Gran Via Fernando Catolico":[["Oeste","Central"],["Oeste","Campanar"]],"Pza de los Fueros":[["Oeste","Norte"],["Norte","Central"]],"Av Tres Cruces":[["Oeste","Central"],["Oeste","Campanar"]],"Pz Zaragoza":[["Norte","Central"],["Central","Norte"]],"Av Perez Galdos":[["Oeste","Central"],["Oeste","Campanar"]],"Gran Via Ramon y Cajal":[["Oeste","Central"],["Central","Oeste"]],"C Juan Llorens":[["Oeste","Central"],["Oeste","Campanar"]],"C Sollana":[["Central","Oeste"],["Central","Norte"]],"Av Archiduque Carlos":[["Oeste","Central"],["Oeste","Campanar"]],"C Alboraya":[["Norte","Central"],["Norte","Campanar"]],"C Riu Bidasoa":[["Norte","Campanar"],["Campanar","Norte"]],"C Linares":[["Oeste","Central"],["Oeste","Campanar"]],"C Bolseria":[["Oeste","Central"],["Oeste","Campanar"]],"C Jose Grollo":[["Campanar","Oeste"],["Campanar","Norte"]],"C Alta":[["Oeste","Campanar"],["Oeste","Norte"]],"C Gravador Selma":[["Oeste","Central"],["Central","Oeste"]],"C Llano de Zaidia":[["Norte","Campanar"],["Campanar","Norte"]],"C Espinosa":[["Oeste","Campanar"],["Oeste","Central"]],"C Guillem de Castro":[["Oeste","Central"],["Oeste","Campanar"],["Central","Oeste"]],"C Centelles":[["Central","Oeste"],["Central","Norte"]],"C Xativa":[["Central","Oeste"],["Central","Norte"]],"C Santo Domingo Guzman":[["Central","Oeste"],["Oeste","Central"]],"C Pere Cavanes":[["Norte","Campanar"],["Campanar","Norte"]],"C Marti l'Huma":[["Oeste","Central"],["Oeste","Campanar"]],"C Maldonado":[["Oeste","Central"],["Oeste","Campanar"]],"Av de la Plata":[["Central","Oeste"],["Central","Norte"]],"Av Peris y Valero":[["Central","Oeste"],["Central","Norte"]],"Av Hermanos Maristas":[["Central","Oeste"],["Central","Norte"]],"CV-30":[["Campanar","Oeste"],["Campanar","Norte"]]};
 
 // Lista de grupos temáticos únicos (para el desplegable de filtro)
 const GRUPOS = [...new Set(ALL_ENTRIES.map(e => e.grupo))]
@@ -1738,39 +1780,74 @@ const GRUPOS = [...new Set(ALL_ENTRIES.map(e => e.grupo))]
 // ============================================================
 const OVR_KEY  = 'quiz_calles_vlc_v2_OVERRIDES';
 const HIST_KEY = 'quiz_calles_vlc_v2_HISTORIAL';
+const DELETED_KEY = 'quiz_calles_vlc_v2_DELETED';
+const STREET_OVERRIDES_KEY = 'quiz_calles_vlc_v2_STREET_OVERRIDES';
 
 function loadOverrides() { try { return JSON.parse(localStorage.getItem(OVR_KEY)) || {}; } catch { return {}; } }
 function saveOverrides(o) { try { localStorage.setItem(OVR_KEY, JSON.stringify(o)); } catch {} }
 function loadHist() { try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch { return []; } }
 function saveHist(h) { try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch {} }
+function loadDeleted() { try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY)) || []); } catch { return new Set(); } }
+function saveDeleted() { try { localStorage.setItem(DELETED_KEY, JSON.stringify([...DELETED_STREETS])); } catch {} }
+function loadStreetOverrides() { try { return JSON.parse(localStorage.getItem(STREET_OVERRIDES_KEY)) || {}; } catch { return {}; } }
+function saveStreetOverrides() { try { localStorage.setItem(STREET_OVERRIDES_KEY, JSON.stringify(STREET_OVERRIDES)); } catch {} }
 
 let OVERRIDES = loadOverrides();
+let DELETED_STREETS = loadDeleted();
+let STREET_OVERRIDES = loadStreetOverrides();
 
-// Guardar el estado original de cada entrada para poder revertir/reaplicar
 ALL_ENTRIES.forEach(e => {
+  e.origCalle = e.calle;
   e.origZone = e.zone;
   e._origSalidas = e.salidas.map(s => [...s]);
 });
 
-function ovKey(e) { return e.calle + '|||' + e.origZone; }
+function ovKey(e) { return e.origCalle + '|||' + e.origZone; }
+function activeEntries() { return ALL_ENTRIES.filter(e => !DELETED_STREETS.has(e.origCalle)); }
+function normalizeParkName(value) {
+  const v = String(value || '').trim().toLowerCase();
+  return ({ norte:'Norte', central:'Central', oeste:'Oeste', campanar:'Campanar', saler:'Saler', 'el saler':'Saler' })[v] || '';
+}
+function dedupeAnswers(answers) {
+  const out = []; const seen = new Set();
+  (answers || []).forEach(pair => {
+    if (!Array.isArray(pair) || pair.length < 2) return;
+    const p1 = normalizeParkName(pair[0]), p2 = normalizeParkName(pair[1]);
+    const key = p1 + '|||' + p2;
+    if (p1 && p2 && !seen.has(key)) { seen.add(key); out.push([p1, p2]); }
+  });
+  return out;
+}
+function allAnswersForEntry(e) {
+  const custom = STREET_OVERRIDES[e.origCalle];
+  if (custom && Array.isArray(custom.salidas) && custom.salidas.length) return dedupeAnswers(custom.salidas);
+  const base = ALL_ENTRIES.filter(x => x.origCalle === e.origCalle).flatMap(x => x.salidas);
+  return dedupeAnswers([...base, ...(SHEET_EXTRA_ANSWERS[e.origCalle] || [])]);
+}
 
 function applyOverrides() {
-  // Reset a original
   ALL_ENTRIES.forEach(e => {
+    e.calle = e.origCalle;
     e.zone = e.origZone;
     e.salidas = e._origSalidas.map(s => [...s]);
     e.modified = false;
   });
-  // Aplicar cada override sobre su entrada
   for (const key in OVERRIDES) {
     const ov = OVERRIDES[key];
     const e = ALL_ENTRIES.find(x => ovKey(x) === key);
     if (e) {
-      e.zone = ov.z1;
-      e.salidas = [[ov.z1, ov.z2], [ov.z2, ov.z1]];
+      e.zone = normalizeParkName(ov.z1) || e.origZone;
+      const p2 = normalizeParkName(ov.z2);
+      e.salidas = p2 ? [[e.zone, p2]] : e._origSalidas.map(s => [...s]);
       e.modified = true;
     }
   }
+  Object.entries(STREET_OVERRIDES).forEach(([origCalle, ov]) => {
+    ALL_ENTRIES.filter(e => e.origCalle === origCalle).forEach(e => {
+      e.calle = String(ov.newName || origCalle).trim() || origCalle;
+      e.modified = true;
+    });
+  });
 }
 applyOverrides();
 
@@ -2133,7 +2210,7 @@ function reinforceReason(rec) {
 // Devuelve el grupo temático activo SOLO si estamos en Todas/Repaso con un
 // filtro de temática concreto seleccionado (no "todas los grupos").
 function grupoFiltroActivo() {
-  if (currentZone !== 'todas' && currentZone !== 'repaso') return null;
+  if (!isGlobalQuestionMode(currentZone)) return null;
   const g = getGrupoSel(currentZone);
   return (g && g !== 'todas') ? g : null;
 }
@@ -2151,6 +2228,33 @@ let queue = [];
 let activePlanReviewGroup = null;
 let persistentAllQueueState = null;
 let persistentAllQueueActive = false;
+let answerMode = 'text';
+let selectedButtonAnswer = { p1: '', p2: '' };
+const PARK_OPTIONS = ['Norte', 'Central', 'Oeste', 'Campanar', 'Saler'];
+function isGlobalQuestionMode(zone) { return ['todas', 'no-aprendidas', 'repaso'].includes(zone); }
+function answerModeKey() { return 'quiz_calles_vlc_v2_ANSWER_MODE_' + CURRENT_USER; }
+function loadAnswerMode() { try { return localStorage.getItem(answerModeKey()) === 'buttons' ? 'buttons' : 'text'; } catch { return 'text'; } }
+function setAnswerMode(mode) {
+  answerMode = mode === 'buttons' ? 'buttons' : 'text';
+  try { localStorage.setItem(answerModeKey(), answerMode); } catch {}
+  updateAnswerModeUI();
+}
+function renderParkButtons() {
+  document.querySelectorAll('.park-buttons').forEach(host => {
+    const slot = host.dataset.answerSlot;
+    host.innerHTML = PARK_OPTIONS.map(p => '<button type="button" class="park-answer-btn" data-slot="' + slot + '" data-park="' + p + '">' + p + '</button>').join('');
+  });
+}
+function updateAnswerModeUI() {
+  const text = document.getElementById('respuesta-escrita');
+  const buttons = document.getElementById('respuesta-botones');
+  if (!text || !buttons) return;
+  text.style.display = answerMode === 'text' ? '' : 'none';
+  buttons.style.display = answerMode === 'buttons' ? 'block' : 'none';
+  document.querySelectorAll('[data-answer-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.answerMode === answerMode));
+  document.getElementById('button-group-p1').style.display = isGlobalQuestionMode(currentZone) ? 'block' : 'none';
+  document.getElementById('button-label-p2').textContent = 'Parque de Apoyo';
+}
 
 // ============================================================
 // CALENDARIO DE REPASO POR TEMÁTICAS (+1, +3, +7, +10 días)
@@ -2225,7 +2329,7 @@ function bootstrapExistingThemes() {
     changed = true;
   }
   GRUPOS.forEach(g => {
-    const practiced = ALL_ENTRIES.some(e => {
+    const practiced = activeEntries().some(e => {
       const r = store[e.calle]; const x = r && r.porGrupo && r.porGrupo[g];
       return x && ((x.ok || 0) + (x.fail || 0) > 0);
     });
@@ -2264,7 +2368,7 @@ function renderStudyPlan() {
   } else {
     host.innerHTML = due.map(([g,x]) => {
       const overdue = x.due < now;
-      const count = uniqueStreetEntries(ALL_ENTRIES.filter(e => e.grupo === g)).length;
+      const count = uniqueStreetEntries(activeEntries().filter(e => e.grupo === g)).length;
       const label = overdue ? `Atrasado desde ${x.due.split('-').reverse().slice(0,2).join('/')}` : `Repaso +${planOffset(x.stage)} días`;
       return `<div class="plan-item ${overdue ? 'overdue' : ''}">
         <div class="plan-item-info"><div class="plan-item-name">${escPlan(g)}</div><div class="plan-item-meta">${label} · ${count} calles</div></div>
@@ -2301,28 +2405,31 @@ function loadGrupoSel(zone) {
 function saveGrupoSel(zone, grupo) {
   try { localStorage.setItem('grupoSel_' + zone, grupo); } catch {}
 }
-let grupoSelTodas = loadGrupoSel('todas');
-let grupoSelRepaso = loadGrupoSel('repaso');
-function getGrupoSel(zone) {
-  return zone === 'repaso' ? grupoSelRepaso : grupoSelTodas;
+function getGrupoSel(zone) { return loadGrupoSel(zone); }
+function setGrupoSel(zone, grupo) { saveGrupoSel(zone, grupo); }
+function entriesForLearningTab(zone) {
+  let list = activeEntries();
+  if (zone === 'todas') list = list.filter(e => getRecord(e.calle).aprendida);
+  else if (zone === 'no-aprendidas') list = list.filter(e => !getRecord(e.calle).aprendida);
+  else if (zone === 'repaso') list = list.filter(e => isFailedRec(store[e.calle]));
+  return uniqueStreetEntries(list);
 }
-function setGrupoSel(zone, grupo) {
-  if (zone === 'repaso') grupoSelRepaso = grupo; else grupoSelTodas = grupo;
-  saveGrupoSel(zone, grupo);
-}
-function populateGrupoSelect() {
+function populateGrupoSelect(zone = currentZone) {
+  const base = entriesForLearningTab(zone);
   const counts = {};
-  GRUPOS.forEach(g => { counts[g] = uniqueStreetEntries(ALL_ENTRIES.filter(e => e.grupo === g)).length; });
+  GRUPOS.forEach(g => { counts[g] = base.filter(e => e.grupo === g).length; });
   const sel = document.getElementById('grupo-filter-select');
-  sel.innerHTML = `<option value="todas">Todos los grupos (${uniqueStreetEntries(ALL_ENTRIES).length})</option>` +
-    GRUPOS.map(g => `<option value="${g.replace(/"/g, '&quot;')}">${g} (${counts[g] || 0})</option>`).join('');
+  sel.innerHTML = '<option value="todas">Todos los grupos (' + base.length + ')</option>' +
+    GRUPOS.map(g => '<option value="' + g.replace(/"/g, '&quot;') + '">' + g + ' (' + (counts[g] || 0) + ')</option>').join('');
+  const selected = getGrupoSel(zone);
+  sel.value = [...sel.options].some(o => o.value === selected) ? selected : 'todas';
 }
 function updateGrupoFilterUI(zone) {
   const wrap = document.getElementById('grupo-filter');
-  const applies = (zone === 'todas' || zone === 'repaso') && !activePlanReviewGroup;
+  const applies = isGlobalQuestionMode(zone) && !activePlanReviewGroup;
   wrap.classList.toggle('show', applies);
   if (!applies) return;
-  document.getElementById('grupo-filter-select').value = getGrupoSel(zone);
+  populateGrupoSelect(zone);
 }
 let qIndex = 0;
 let answered = false;
@@ -2347,10 +2454,9 @@ function uniqueStreetEntries(list) {
 }
 
 function validStreetAnswers(calle) {
-  const seen = new Set();
-  const answers = [];
-  ALL_ENTRIES.filter(e => e.calle === calle).forEach(e => {
-    e.salidas.filter(s => s[0] === e.zone).forEach(s => {
+  const seen = new Set(); const answers = [];
+  activeEntries().filter(e => e.calle === calle).forEach(e => {
+    allAnswersForEntry(e).forEach(s => {
       const id = s[0] + '|||' + s[1];
       if (!seen.has(id)) { seen.add(id); answers.push(s); }
     });
@@ -2359,27 +2465,29 @@ function validStreetAnswers(calle) {
 }
 
 function validAnswersForQuestion(e) {
-  return (currentZone === 'todas' || currentZone === 'repaso')
+  return isGlobalQuestionMode(currentZone)
     ? validStreetAnswers(e.calle)
-    : e.salidas.filter(s => s[0] === e.zone);
+    : allAnswersForEntry(e).filter(s => s[0] === e.zone);
 }
 
 function getFilteredEntries(zone) {
-  if (zone === 'todas') {
-    let list = [...ALL_ENTRIES];
+  if (zone === 'todas' || zone === 'no-aprendidas') {
+    let list = [...activeEntries()];
     if (activePlanReviewGroup) return uniqueStreetEntries(list.filter(e => e.grupo === activePlanReviewGroup));
-    const g = getGrupoSel('todas');
+    const learned = zone === 'todas';
+    list = list.filter(e => !!getRecord(e.calle).aprendida === learned);
+    const g = getGrupoSel(zone);
     if (g !== 'todas') list = list.filter(e => e.grupo === g);
     return uniqueStreetEntries(list);
   }
   if (zone === 'repaso') {
-    let list = ALL_ENTRIES.filter(e => isFailedRec(store[e.calle]));
+    let list = activeEntries().filter(e => isFailedRec(store[e.calle]));
     const g = getGrupoSel('repaso');
     if (g !== 'todas') list = list.filter(e => e.grupo === g);
     return uniqueStreetEntries(list);
   }
   const z = zone.charAt(0).toUpperCase() + zone.slice(1);
-  let list = ALL_ENTRIES.filter(e => e.zone === z);
+  let list = activeEntries().filter(e => e.zone === z);
   if (onlyFailed) list = list.filter(e => isFailedRec(store[e.calle]));
   return list;
 }
@@ -2391,7 +2499,7 @@ function updateZoneFilterUI(zone) {
   wrap.classList.toggle('show', isParque);
   if (!isParque) return;
   const z = zone.charAt(0).toUpperCase() + zone.slice(1);
-  const failCount = ALL_ENTRIES.filter(e => e.zone === z && isFailedRec(store[e.calle])).length;
+  const failCount = activeEntries().filter(e => e.zone === z && isFailedRec(store[e.calle])).length;
   btn.classList.toggle('active', onlyFailed);
   btn.textContent = onlyFailed ? 'Ver todas' : `★ Solo falladas (${failCount})`;
 }
@@ -2453,9 +2561,9 @@ function startQuiz(zone) {
     document.getElementById('quiz-card').style.display = 'none';
     document.getElementById('completed-card').classList.remove('show');
     const grupoSel = getGrupoSel(zone);
-    const grupoTxt = (zone === 'todas' || zone === 'repaso') && grupoSel !== 'todas'
+    const grupoTxt = isGlobalQuestionMode(zone) && grupoSel !== 'todas'
       ? ` del grupo «${grupoSel}»` : '';
-    const msg = zone === 'repaso'
+    const msg = zone === 'no-aprendidas' ? 'Ya has aprendido todas las calles de este grupo.' : zone === 'repaso'
       ? (grupoTxt
           ? `No hay calles falladas${grupoTxt} (aún).<br>¡Sigue practicando ese grupo!`
           : 'No hay calles falladas aún.<br>Practica primero en otra pestaña.')
@@ -2487,35 +2595,24 @@ function updateNoteFlag() {
 }
 
 function renderQuestion() {
-  if (qIndex >= queue.length) {
-    showCompleted();
-    return;
-  }
+  if (qIndex >= queue.length) { showCompleted(); return; }
   const e = queue[qIndex];
   answered = false;
-
-  // Restore card HTML structure
   document.getElementById('empty-state-card').style.display = 'none';
   document.getElementById('quiz-card').style.display = 'block';
   document.getElementById('completed-card').classList.remove('show');
   const card = document.getElementById('quiz-card');
-  // reset color classes (oculto en 'todas' para no delatar el parque por el color)
-  const hideColor = (currentZone === 'todas' || currentZone === 'repaso');
+  const hideColor = isGlobalQuestionMode(currentZone);
   card.className = 'quiz-card ' + (hideColor ? 'zone-hidden' : 'zone-' + e.zone.toLowerCase());
 
-  document.getElementById('calle-nombre').innerHTML =
-    e.calle + (e.modified ? '<span class="mod-badge">modificada</span>' : '');
-  document.getElementById('calle-grupo').textContent = (activePlanReviewGroup || e.grupo === 'Calles del Saler') ? '' : e.grupo;
+  document.getElementById('calle-nombre').innerHTML = e.calle + (e.modified ? '<span class="mod-badge">modificada</span>' : '');
+  const hideTheme = currentZone === 'todas' || currentZone === 'no-aprendidas' || activePlanReviewGroup || e.grupo === 'Calles del Saler';
+  document.getElementById('calle-grupo').textContent = hideTheme ? '' : e.grupo;
   const multiWarning = document.getElementById('multi-answer-warning');
-  const validAnswers = validAnswersForQuestion(e);
-  const showMultiWarning = (currentZone === 'todas' || currentZone === 'repaso') && validAnswers.length > 1;
-  multiWarning.textContent = showMultiWarning ? `⚠ Esta calle admite ${validAnswers.length} respuestas válidas` : '';
-  multiWarning.classList.toggle('show', showMultiWarning);
+  multiWarning.textContent = '';
+  multiWarning.classList.remove('show');
 
-  // cerrar panel de modificación al cambiar de calle
   document.getElementById('modify-panel').classList.remove('open');
-
-  // Mapa incrustado: se colapsa al cambiar de calle
   document.getElementById('btn-maps').classList.remove('active');
   document.getElementById('mapa-body').classList.remove('visible');
   document.getElementById('mapa-leaflet').classList.remove('ready');
@@ -2523,96 +2620,90 @@ function renderQuestion() {
   document.getElementById('mapa-fix-input').value = '';
 
   const rec = getRecord(e.calle);
-
-  // Nota
   const textarea = document.getElementById('nota-textarea');
   textarea.value = rec.nota || '';
   document.getElementById('nota-body').classList.remove('visible');
   document.getElementById('nota-toggle').classList.remove('open');
   updateNoteFlag();
   updateAprendidaBtn(rec);
-  
-  
 
-  // Selects
   const selP = document.getElementById('sel-primero');
   const selA = document.getElementById('sel-apoyo');
   const grupoApoyo = document.getElementById('grupo-apoyo');
   const row = document.getElementById('respuesta-row');
+  selP.value = ''; selA.value = '';
+  selP.className = 'parque-select'; selA.className = 'parque-select';
+  selectedButtonAnswer = { p1: '', p2: '' };
+  document.querySelectorAll('.park-answer-btn').forEach(btn => btn.classList.remove('selected', 'correct', 'wrong'));
+  document.querySelectorAll('.answer-button-group').forEach(group => group.classList.remove('missing'));
 
-  selP.value = '';
-  selA.value = '';
-  selP.className = 'parque-select';
-  selA.className = 'parque-select';
-
-  if (currentZone !== 'todas' && currentZone !== 'repaso') {
-    // solo apoyo
+  if (!isGlobalQuestionMode(currentZone)) {
     row.className = 'respuesta-row single';
     selP.parentElement.style.display = 'none';
     grupoApoyo.style.display = 'block';
-    selA.parentElement.querySelector('label').textContent = 'Parque de Apoyo';
   } else {
     row.className = 'respuesta-row';
     selP.parentElement.style.display = 'block';
     grupoApoyo.style.display = 'block';
-    selA.parentElement.querySelector('label').textContent = 'Parque de Apoyo';
   }
+  selA.parentElement.querySelector('label').textContent = 'Parque de Apoyo';
+  updateAnswerModeUI();
 
-  // Progress
-  document.getElementById('progress-label').textContent = `${qIndex + 1} / ${queue.length}`;
+  document.getElementById('progress-label').textContent = (qIndex + 1) + ' / ' + queue.length;
   document.getElementById('btn-back').disabled = qIndex === 0;
-  document.getElementById('progress-fill').style.width = `${(qIndex / queue.length) * 100}%`;
-
+  document.getElementById('progress-fill').style.width = ((qIndex / queue.length) * 100) + '%';
   document.getElementById('btn-check').textContent = 'Comprobar';
   document.getElementById('btn-check').disabled = false;
   document.getElementById('feedback-bar').classList.remove('show');
-
   updateHeaderStats();
 }
 
 function checkAnswer() {
   if (answered) { nextQuestion(); return; }
-
   const e = queue[qIndex];
   const rec = getRecord(e.calle);
   const selP = document.getElementById('sel-primero');
   const selA = document.getElementById('sel-apoyo');
-  const isZoneMode = currentZone !== 'todas' && currentZone !== 'repaso';
-
+  const isZoneMode = !isGlobalQuestionMode(currentZone);
   let correct = false;
   let respuestaConcreta = '';
-
-  const normalize = v => v.trim().toLowerCase();
-
-  // En Todas/Repaso se aceptan todas las combinaciones registradas para el
-  // mismo nombre. En cada parque se mantiene la respuesta propia de la zona.
   const real = validAnswersForQuestion(e);
+  const p1 = answerMode === 'buttons' ? selectedButtonAnswer.p1 : selP.value.trim();
+  const p2 = answerMode === 'buttons' ? selectedButtonAnswer.p2 : selA.value.trim();
 
   if (isZoneMode) {
-    const apoyo = selA.value;
-    if (!apoyo.trim()) { selA.style.borderColor = 'var(--wrong)'; return; }
-    const validApoyos = new Set(real.map(s => s[1].toLowerCase()));
-    correct = validApoyos.has(normalize(apoyo));
-    respuestaConcreta = `${e.zone} → ${apoyo.trim()}`;
-    selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
+    if (!p2) {
+      if (answerMode === 'buttons') document.getElementById('button-group-p2').classList.add('missing');
+      else selA.style.borderColor = 'var(--wrong)';
+      return;
+    }
+    correct = real.some(s => s[1].toLowerCase() === p2.toLowerCase());
+    respuestaConcreta = e.zone + ' → ' + p2;
+    if (answerMode === 'text') selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
   } else {
-    const p1 = selP.value;
-    const p2 = selA.value;
-    if (!p1.trim()) { selP.style.borderColor = 'var(--wrong)'; return; }
-    if (!p2.trim()) { selA.style.borderColor = 'var(--wrong)'; return; }
-    correct = real.some(s =>
-      s[0].toLowerCase() === normalize(p1) &&
-      s[1].toLowerCase() === normalize(p2)
-    );
-    respuestaConcreta = `${p1.trim()} → ${p2.trim()}`;
-    selP.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
-    selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
+    if (!p1 || !p2) {
+      if (answerMode === 'buttons') {
+        if (!p1) document.getElementById('button-group-p1').classList.add('missing');
+        if (!p2) document.getElementById('button-group-p2').classList.add('missing');
+      } else {
+        if (!p1) selP.style.borderColor = 'var(--wrong)';
+        if (!p2) selA.style.borderColor = 'var(--wrong)';
+      }
+      return;
+    }
+    correct = real.some(s => s[0].toLowerCase() === p1.toLowerCase() && s[1].toLowerCase() === p2.toLowerCase());
+    respuestaConcreta = p1 + ' → ' + p2;
+    if (answerMode === 'text') {
+      selP.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
+      selA.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
+    }
+  }
+  if (answerMode === 'buttons') {
+    document.querySelectorAll('.park-answer-btn.selected').forEach(btn => btn.classList.add(correct ? 'correct' : 'wrong'));
   }
 
-  // Save nota on answer
   rec.nota = document.getElementById('nota-textarea').value;
   addRecentAttempt(rec, correct, respuestaConcreta);
-
   if (correct) {
     rec.ok++;
     rec.streak = (rec.streak || 0) + 1;
@@ -2623,30 +2714,25 @@ function checkAnswer() {
   } else {
     rec.fail++;
     rec.streak = 0;
+    rec.aprendida = false;
+    rec.manual = false;
     rec.pendingFail = true;
     rec.pendingFailEntry = entryVariantId(e);
     sessionFail++;
     showFeedback(false, e);
-    // Solo altera la cola de esta sesión, nunca el calendario espaciado.
-    const distance = 3 + Math.floor(Math.random() * 2);
-    const insertAt = Math.min(queue.length, qIndex + distance + 1);
-    queue.splice(insertAt, 0, e);
+    if (currentZone !== 'todas') {
+      const distance = 3 + Math.floor(Math.random() * 2);
+      const insertAt = Math.min(queue.length, qIndex + distance + 1);
+      queue.splice(insertAt, 0, e);
+    }
   }
 
-  // Historial por temática: solo suma aquí si estamos estudiando con un
-  // filtro de grupo concreto activo (no cuenta lo hecho en "Todas" sin
-  // filtro ni en las pestañas de parque, que siguen yendo al contador general).
   const grupoActivo = grupoFiltroActivo();
   if (grupoActivo) {
     if (!rec.porGrupo[grupoActivo]) rec.porGrupo[grupoActivo] = { ok: 0, fail: 0 };
     if (correct) rec.porGrupo[grupoActivo].ok++; else rec.porGrupo[grupoActivo].fail++;
   }
-
-  // Aprendida automática: 5 aciertos seguidos. Si el usuario la controla
-  // manualmente, no la tocamos (ni al acertar ni al fallar).
-  if (!rec.manual) {
-    rec.aprendida = rec.streak >= 5;
-  }
+  if (correct && !rec.manual) rec.aprendida = rec.streak >= 5;
 
   saveRecord(e.calle, rec);
   answered = true;
@@ -2661,7 +2747,7 @@ function showFeedback(ok, e) {
   bar.className = 'feedback-bar show ' + (ok ? 'correct' : 'wrong');
   document.getElementById('feedback-icon').textContent = ok ? '✓' : '✗';
   document.getElementById('feedback-text').textContent = ok ? '¡Correcto!' : 'Incorrecto';
-  const isZoneMode = currentZone !== 'todas' && currentZone !== 'repaso';
+  const isZoneMode = !isGlobalQuestionMode(currentZone);
   const real = validAnswersForQuestion(e);
   if (!ok) {
 
@@ -2735,7 +2821,7 @@ function updateHeaderStats() {
 // PROGRESO / APRENDIDAS
 // ============================================================
 function computeMastery(zone) {
-  let list = ALL_ENTRIES;
+  let list = activeEntries();
   if (zone && zone !== 'todas') {
     const z = capZone(zone);
     list = list.filter(e => e.zone === z);
@@ -2752,6 +2838,8 @@ function renderMastery() {
   document.getElementById('mastery-global-pct').textContent = g.pct + '%';
   document.getElementById('mastery-global-count').textContent = `(${g.learned}/${g.total})`;
   document.getElementById('mastery-global-fill').style.width = g.pct + '%';
+  const remaining = document.getElementById('count-no-aprendidas');
+  if (remaining) remaining.textContent = ' ' + (g.total - g.learned);
 
   ['todas', 'norte', 'central', 'oeste', 'campanar', 'saler'].forEach(z => {
     const m = computeMastery(z);
@@ -2773,7 +2861,7 @@ function updateAprendidaBtn(rec) {
 function capZone(z) { return z.charAt(0).toUpperCase() + z.slice(1); }
 
 function statsTableHTML(scope, grupo) {
-  let list = ALL_ENTRIES.map(e => ({ ...e, rec: getRecord(e.calle) }))
+  let list = activeEntries().map(e => ({ ...e, rec: getRecord(e.calle) }))
     .filter(e => e.rec.fail > 0 || e.rec.ok > 0);
   if (scope && scope !== 'todas') { const z = capZone(scope); list = list.filter(e => e.zone === z); }
   if (grupo) list = list.filter(e => e.grupo === grupo);
@@ -2820,44 +2908,62 @@ function renderStats() {
 }
 
 // ============================================================
-// MODIFICAR CALLE
+// MODIFICAR Y ELIMINAR CALLE
 // ============================================================
+function answerRowHTML(pair = ['', '']) {
+  const options = PARK_OPTIONS.map(p => '<option value="' + p + '"></option>').join('');
+  return '<div class="mod-answer-row"><div class="input-group"><label>1ª Salida</label><input class="mod-input mod-answer-p1" list="zonas-list" value="' + escPlan(pair[0] || '') + '"></div>' +
+    '<div class="input-group"><label>2ª Salida</label><input class="mod-input mod-answer-p2" list="zonas-list" value="' + escPlan(pair[1] || '') + '"></div>' +
+    '<button type="button" class="mod-remove-answer" title="Quitar esta respuesta">×</button></div>';
+}
+function renderModifyAnswers(pairs) {
+  const list = document.getElementById('mod-answers-list');
+  list.innerHTML = (pairs && pairs.length ? pairs : [['', '']]).map(answerRowHTML).join('');
+}
 function openModifyPanel() {
   if (qIndex >= queue.length) return;
   const e = queue[qIndex];
-  const panel = document.getElementById('modify-panel');
-  document.getElementById('mod-p1').value = e.salidas[0] ? e.salidas[0][0] : '';
-  document.getElementById('mod-p2').value = e.salidas[0] ? e.salidas[0][1] : '';
-  document.getElementById('btn-mod-revert').style.display = e.modified ? 'inline' : 'none';
-  panel.classList.add('open');
-  document.getElementById('mod-p1').focus();
+  document.getElementById('mod-calle').value = e.calle;
+  renderModifyAnswers(allAnswersForEntry(e));
+  document.getElementById('btn-mod-revert').style.display = (e.modified || STREET_OVERRIDES[e.origCalle]) ? 'inline' : 'none';
+  document.getElementById('modify-panel').classList.add('open');
+  document.getElementById('mod-calle').focus();
 }
-
+function collectModifiedAnswers() {
+  const answers = [];
+  document.querySelectorAll('.mod-answer-row').forEach(row => {
+    const p1 = normalizeParkName(row.querySelector('.mod-answer-p1').value);
+    const p2 = normalizeParkName(row.querySelector('.mod-answer-p2').value);
+    if (p1 && p2 && !answers.some(p => p[0] === p1 && p[1] === p2)) answers.push([p1, p2]);
+  });
+  return answers;
+}
 function saveModify() {
   if (qIndex >= queue.length) return;
   const e = queue[qIndex];
-  const z1 = document.getElementById('mod-p1').value.trim();
-  const z2 = document.getElementById('mod-p2').value.trim();
-  if (!z1 || !z2) {
-    document.getElementById('mod-p1').style.borderColor = z1 ? '' : 'var(--wrong)';
-    document.getElementById('mod-p2').style.borderColor = z2 ? '' : 'var(--wrong)';
+  const oldName = e.calle;
+  const newName = document.getElementById('mod-calle').value.trim();
+  const answers = collectModifiedAnswers();
+  if (!newName || !answers.length) {
+    document.getElementById('mod-calle').style.borderColor = newName ? '' : 'var(--wrong)';
+    if (!answers.length) document.getElementById('mod-answers-list').style.outline = '1px solid var(--wrong)';
     return;
   }
-  const cap = v => v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
-  const nz1 = cap(z1), nz2 = cap(z2);
-  const prevZone = e.zone;
-
-  OVERRIDES[ovKey(e)] = { calle: e.calle, origZone: e.origZone, z1: nz1, z2: nz2, user: CURRENT_USER, ts: Date.now() };
+  const first = answers[0];
+  OVERRIDES[ovKey(e)] = { calle: e.origCalle, origZone: e.origZone, z1: first[0], z2: first[1], user: CURRENT_USER, ts: Date.now() };
   saveOverrides(OVERRIDES);
+  STREET_OVERRIDES[e.origCalle] = { newName, salidas: answers, user: CURRENT_USER, ts: Date.now() };
+  saveStreetOverrides();
 
+  if (newName !== oldName) {
+    store[newName] = mergeRecord(store[newName] || {}, mergeRecord(store[oldName] || {}, store[e.origCalle] || {}));
+    saveStorage(store);
+  }
   const hist = loadHist();
-  hist.push({ calle: e.calle, from: prevZone, z1: nz1, z2: nz2, origZone: e.origZone, user: CURRENT_USER, ts: Date.now(), type: 'mod' });
+  hist.push({ calle: oldName, newCalle: newName, from: e.zone, z1: first[0], z2: first[1], answers, origZone: e.origZone, origCalle: e.origCalle, user: CURRENT_USER, ts: Date.now(), type: 'mod' });
   saveHist(hist);
-
   applyOverrides();
   document.getElementById('modify-panel').classList.remove('open');
-
-  // Sacar la calle de la ronda actual si cambió de zona respecto a la pestaña
   queue.splice(qIndex, 1);
   if (queue.length === 0) { showCompleted(); return; }
   if (qIndex >= queue.length) qIndex = queue.length - 1;
@@ -2865,21 +2971,31 @@ function saveModify() {
   answered = false;
   renderQuestion();
 }
-
 function revertModify() {
   if (qIndex >= queue.length) return;
   const e = queue[qIndex];
-  const key = ovKey(e);
-  if (OVERRIDES[key]) {
-    delete OVERRIDES[key];
-    saveOverrides(OVERRIDES);
-    const hist = loadHist();
-    hist.push({ calle: e.calle, from: e.zone, z1: e.origZone, z2: (e._origSalidas[0] ? e._origSalidas[0][1] : ''), origZone: e.origZone, user: CURRENT_USER, ts: Date.now(), type: 'revert' });
-    saveHist(hist);
-    applyOverrides();
-  }
+  delete OVERRIDES[ovKey(e)];
+  delete STREET_OVERRIDES[e.origCalle];
+  saveOverrides(OVERRIDES); saveStreetOverrides();
+  const hist = loadHist();
+  hist.push({ calle: e.calle, from: e.zone, z1: e.origZone, z2: e._origSalidas[0] ? e._origSalidas[0][1] : '', origZone: e.origZone, origCalle: e.origCalle, user: CURRENT_USER, ts: Date.now(), type: 'revert' });
+  saveHist(hist);
+  applyOverrides();
   document.getElementById('modify-panel').classList.remove('open');
   renderQuestion();
+}
+function deleteCurrentStreet() {
+  if (qIndex >= queue.length) return;
+  const e = queue[qIndex];
+  if (!confirm('¿Eliminar «' + e.calle + '» del quiz? Quedará registrada en el historial.')) return;
+  DELETED_STREETS.add(e.origCalle); saveDeleted();
+  const hist = loadHist();
+  hist.push({ calle: e.calle, from: e.zone, origZone: e.origZone, origCalle: e.origCalle, user: CURRENT_USER, ts: Date.now(), type: 'delete' });
+  saveHist(hist);
+  queue = queue.filter(item => item.origCalle !== e.origCalle);
+  if (qIndex >= queue.length) qIndex = Math.max(0, queue.length - 1);
+  renderMastery(); renderAllHistLists();
+  if (!queue.length) showCompleted(); else renderQuestion();
 }
 
 // ============================================================
@@ -2906,7 +3022,7 @@ function histListHTML(scope) {
   const latestModForKey = {};
   histOrig.forEach((h, i) => {
     if (h.type === 'mod') {
-      const key = h.calle + '|||' + (h.origZone || h.from);
+      const key = (h.origCalle || h.calle) + '|||' + (h.origZone || h.from);
       if (activeKeys.has(key)) latestModForKey[key] = i;
     }
   });
@@ -2915,8 +3031,10 @@ function histListHTML(scope) {
 
   return idx.reverse().map(({ h, i }) => {
     const isRev = h.type === 'revert';
+    const isDelete = h.type === 'delete';
+    if (isDelete) return '<div class="hist-item"><span class="hcalle">' + h.calle + '</span><span class="harrow">· eliminada</span><span class="hmeta">' + (h.user || '?') + ' · ' + fmtDate(h.ts) + '</span></div>';
     const canRevert = revertibleIdx.has(i);
-    const key = h.calle + '|||' + (h.origZone || h.from);
+    const key = (h.origCalle || h.calle) + '|||' + (h.origZone || h.from);
     return `<div class="hist-item ${isRev ? 'revert' : ''}">
       <span class="hcalle">${h.calle}</span>
       <span class="harrow">·</span>
@@ -2947,13 +3065,16 @@ function revertFromHistorial(key) {
   const ov = OVERRIDES[key];
   if (!ov) { renderAllHistLists(); return; }
   const e = ALL_ENTRIES.find(x => ovKey(x) === key);
+  const originalName = e ? e.origCalle : key.split('|||')[0];
   const calle = ov.calle || (e && e.calle) || key.split('|||')[0];
   const origZone = ov.origZone || key.split('|||')[1];
   const from = e ? e.zone : ov.z1;
   const z2orig = (e && e._origSalidas[0]) ? e._origSalidas[0][1] : '';
 
   delete OVERRIDES[key];
+  delete STREET_OVERRIDES[originalName];
   saveOverrides(OVERRIDES);
+  saveStreetOverrides();
 
   const hist = loadHist();
   hist.push({ calle, from, z1: origZone, z2: z2orig, origZone, user: CURRENT_USER, ts: Date.now(), type: 'revert' });
@@ -2970,7 +3091,7 @@ function belowScope() {
 
 function renderBelowQuiz() {
   const scope = belowScope();
-  const grupo = activePlanReviewGroup || ((currentZone === 'todas' || currentZone === 'repaso') ? grupoFiltroActivo() : null);
+  const grupo = activePlanReviewGroup || (isGlobalQuestionMode(currentZone) ? grupoFiltroActivo() : null);
   const label = grupo ? ' de «' + grupo + '»' : (scope === 'todas' ? '' : ' de ' + capZone(scope));
   document.getElementById('below-quiz').innerHTML = `
     <div class="collapsible" data-scope="${scope}">
@@ -3001,7 +3122,7 @@ function copyForExcel() {
 }
 
 function exportData() {
-  const payload = { overrides: loadOverrides(), historial: loadHist(), exportedBy: CURRENT_USER, at: Date.now() };
+  const payload = { overrides: loadOverrides(), streetOverrides: loadStreetOverrides(), deleted: [...DELETED_STREETS], historial: loadHist(), exportedBy: CURRENT_USER, at: Date.now() };
   const text = JSON.stringify(payload);
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -3017,7 +3138,7 @@ function exportData() {
 function importData(text) {
   let data;
   try { data = JSON.parse(text); } catch { alert('El texto pegado no es válido.'); return; }
-  if (!data || (!data.overrides && !data.historial)) { alert('No se reconoce el contenido.'); return; }
+  if (!data || (!data.overrides && !data.streetOverrides && !data.deleted && !data.historial)) { alert('No se reconoce el contenido.'); return; }
 
   // Fusionar overrides: gana el más reciente por timestamp
   const cur = loadOverrides();
@@ -3026,6 +3147,10 @@ function importData(text) {
   }
   saveOverrides(cur);
   OVERRIDES = cur;
+  STREET_OVERRIDES = { ...(data.streetOverrides || {}), ...loadStreetOverrides() };
+  saveStreetOverrides();
+  (data.deleted || []).forEach(name => DELETED_STREETS.add(name));
+  saveDeleted();
 
   // Fusionar historial evitando duplicados (calle+ts+user)
   const curH = loadHist();
@@ -3182,12 +3307,32 @@ document.getElementById('mapa-fix-toggle').addEventListener('click', ev => {
 document.getElementById('mapa-fix-save').addEventListener('click', saveManualCoord);
 document.getElementById('mapa-research').addEventListener('click', ev => { ev.preventDefault(); researchCoord(); });
 document.getElementById('btn-modify').addEventListener('click', openModifyPanel);
+document.getElementById('btn-delete').addEventListener('click', deleteCurrentStreet);
+document.getElementById('btn-mod-add-answer').addEventListener('click', () => {
+  document.getElementById('mod-answers-list').insertAdjacentHTML('beforeend', answerRowHTML());
+});
+document.getElementById('mod-answers-list').addEventListener('click', ev => {
+  const btn = ev.target.closest('.mod-remove-answer'); if (!btn) return;
+  const rows = document.querySelectorAll('.mod-answer-row');
+  if (rows.length > 1) btn.closest('.mod-answer-row').remove();
+});
+document.getElementById('answer-mode-switch').addEventListener('click', ev => {
+  const btn = ev.target.closest('[data-answer-mode]'); if (!btn || answered) return;
+  setAnswerMode(btn.dataset.answerMode);
+});
+document.getElementById('respuesta-botones').addEventListener('click', ev => {
+  const btn = ev.target.closest('.park-answer-btn'); if (!btn || answered) return;
+  selectedButtonAnswer[btn.dataset.slot] = btn.dataset.park;
+  btn.parentElement.querySelectorAll('.park-answer-btn').forEach(x => x.classList.toggle('selected', x === btn));
+  btn.closest('.answer-button-group').classList.remove('missing');
+});
 document.getElementById('btn-aprendida').addEventListener('click', () => {
   if (qIndex >= queue.length) return;
   const e = queue[qIndex];
   const rec = getRecord(e.calle);
   rec.aprendida = !rec.aprendida;
-  rec.manual = true; // a partir de ahora, el contador automático no la toca
+  rec.manual = rec.aprendida;
+  if (!rec.aprendida) rec.streak = 0;
   saveRecord(e.calle, rec);
   updateAprendidaBtn(rec);
   renderMastery();
@@ -3317,7 +3462,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   const active = document.activeElement;
   const modPanelOpen = document.getElementById('modify-panel').classList.contains('open');
-  if (active === document.getElementById('mod-p1') || active === document.getElementById('mod-p2')) {
+  if (modPanelOpen && active && active.matches('#mod-calle, .mod-answer-p1, .mod-answer-p2')) {
     e.preventDefault();
     saveModify();
     return;
@@ -3383,6 +3528,8 @@ function getDailyPhrase() {
 function enterApp(user) {
   CURRENT_USER = user;
   store = migrateUserData(user);
+  answerMode = loadAnswerMode();
+  renderParkButtons();
   document.getElementById('user-select-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('switch-user-btn').textContent = '↩ ' + user;
