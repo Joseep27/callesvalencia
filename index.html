@@ -1965,7 +1965,7 @@ function pinLink(coord, calle) {
 
 let leafletMap = null;
 let calleMarker = null;
-const pinIcon = L.divIcon({
+const pinIcon = typeof L === 'undefined' ? null : L.divIcon({
   className: 'pin-emoji-icon',
   html: '<span>📍</span>',
   iconSize: [30, 30],
@@ -2051,6 +2051,11 @@ async function toggleMapa() {
   mapDiv.classList.remove('ready');
 
   document.getElementById('mapa-open-classic').href = pinLink(null, e.calle);
+
+  if (typeof L === 'undefined') {
+    loading.textContent = 'El mapa necesita conexión. Puedes seguir repasando las calles sin él.';
+    return;
+  }
 
   initLeafletMap();
   setTimeout(() => leafletMap && leafletMap.invalidateSize(), 30);
