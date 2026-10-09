@@ -3,7 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#11172b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quiz Calles Valencia Temáticas</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -749,6 +754,45 @@
     .respuesta-row { grid-template-columns: 1fr; }
     main { padding: 20px 16px; }
   }
+  .sync-status-btn { font-family:'Barlow Condensed',sans-serif; font-size:13px; font-weight:700; white-space:nowrap; padding:6px 12px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); color:var(--muted); cursor:pointer; }
+  .sync-status-btn.online { border-color:var(--correct); color:var(--correct); }
+  .sync-status-btn.error { border-color:var(--wrong); color:#ff8f83; }
+  .sync-modal-backdrop { display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,.75); padding:16px; align-items:center; justify-content:center; }
+  .sync-modal-backdrop.open { display:flex; }
+  .sync-modal-card { width:min(100%,420px); max-height:calc(100dvh - 32px); overflow:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px; }
+  .sync-modal-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .sync-modal-top h2 { font-size:24px; text-transform:uppercase; }
+  .sync-modal-close { border:0; background:transparent; color:var(--text); font-size:26px; cursor:pointer; }
+  .sync-copy { font-size:16px; line-height:1.35; color:var(--muted); margin-bottom:16px; }
+  .sync-field { display:block; margin:12px 0; font-size:14px; text-transform:uppercase; color:var(--muted); }
+  .sync-field input { display:block; width:100%; margin-top:5px; padding:12px; font:18px 'Barlow Condensed',sans-serif; color:var(--text); background:var(--surface2); border:1px solid var(--border); border-radius:8px; }
+  .sync-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .sync-actions button { flex:1; min-width:105px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font:700 16px 'Barlow Condensed',sans-serif; cursor:pointer; }
+  .sync-actions button:first-child { background:var(--theme); color:var(--bg); border-color:var(--theme); }
+  .sync-message { margin-top:14px; min-height:20px; color:var(--muted); font-size:15px; overflow-wrap:anywhere; }
+  .sync-message.error { color:#ff8f83; }
+  .sync-message.ok { color:#75d89d; }
+  @media (max-width:700px) {
+    header { position:static; padding:12px 14px; flex-wrap:wrap; gap:10px; }
+    header h1 { font-size:19px; width:100%; }
+    .header-right { width:100%; gap:7px; flex-wrap:wrap; }
+    .motivational { display:none; }
+    .header-right button { min-height:39px; }
+    .tabs { padding:0 8px; scroll-snap-type:x proximity; }
+    .tab { padding:12px 14px; scroll-snap-align:start; }
+    .mastery-global { padding:10px 16px; }
+    .quiz-card { padding:18px 14px; }
+    .card-actions { flex-wrap:wrap; gap:6px; }
+    .card-actions button { min-height:38px; }
+    .user-select-inner { width:100%; padding:20px; }
+    .user-buttons { flex-wrap:wrap; gap:10px; }
+    .user-btn { flex:1; min-width:125px; padding:16px; }
+  }
+  @media (max-width:380px) {
+    .park-buttons { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .btn-row { gap:5px; }
+    .btn-row .btn { padding:12px 5px; font-size:14px; }
+  }
 </style>
 </head>
 <body>
@@ -762,6 +806,7 @@
       <button class="user-btn" data-user="Josep">Josep</button>
       <button class="user-btn" data-user="Tudón">Tudón</button>
     </div>
+    <button type="button" class="sync-status-btn" id="profile-sync-button" style="margin-top:22px">☁ Sin conectar</button>
   </div>
 </div>
 
@@ -770,6 +815,7 @@
   <h1>Quiz Calles Valencia <span>Temáticas</span></h1>
   <div class="header-right">
     <div class="motivational" id="motivational-phrase"></div>
+    <button type="button" class="sync-status-btn" id="header-sync-button">☁ Sin conectar</button>
     <button class="switch-user-btn" id="backup-export-btn" title="Guardar progreso, planes y ajustes">⬇ Copia</button>
     <button class="switch-user-btn" id="backup-import-btn" title="Recuperar una copia sin borrar lo actual">⬆ Recuperar</button>
     <input type="file" id="backup-file-input" accept=".json,.txt,application/json,text/plain" hidden>
@@ -3564,5 +3610,26 @@ document.getElementById('switch-user-btn').addEventListener('click', () => {
 // Start on user select screen - app starts after user picks
 </script>
 </div><!-- #app -->
+<div class="sync-modal-backdrop" id="sync-modal" role="presentation">
+  <div class="sync-modal-card" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+    <div class="sync-modal-top"><h2 id="sync-title">Sincronización</h2><button type="button" class="sync-modal-close" id="sync-close" aria-label="Cerrar">×</button></div>
+    <div id="sync-signed-out">
+      <p class="sync-copy">Usa la misma cuenta que en Sitios Relevantes en el ordenador y en el móvil. Tus datos actuales se conservan al conectar.</p>
+      <label class="sync-field">Correo<input id="sync-email" type="email" autocomplete="email"></label>
+      <label class="sync-field">Contraseña<input id="sync-password" type="password" autocomplete="current-password"></label>
+      <div class="sync-actions"><button type="button" id="sync-sign-in">Entrar</button><button type="button" id="sync-sign-up">Crear acceso</button></div>
+    </div>
+    <div id="sync-signed-in" hidden>
+      <p class="sync-copy">Los perfiles Josep y Tudón, las notas, planes y ajustes de este callejero se sincronizan sin borrar la copia local.</p>
+      <div id="sync-user-email"></div>
+      <div class="sync-actions"><button type="button" id="sync-now">Sincronizar ahora</button><button type="button" id="sync-sign-out">Salir</button></div>
+    </div>
+    <div class="sync-message" id="sync-message" aria-live="polite"></div>
+  </div>
+</div>
+<script type="module" src="./sync.js"></script>
+<script>
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+</script>
 </body>
 </html>
