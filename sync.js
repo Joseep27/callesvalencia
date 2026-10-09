@@ -172,7 +172,7 @@ async function initialSync() {
     ready = true;
     status('online', '☁ Sincronizado');
     message('Datos sincronizados correctamente.', 'ok');
-    if (changed && element('app').style.display !== 'none') setTimeout(() => location.reload(), 250);
+    if (changed) setTimeout(() => location.reload(), 250);
   } catch (error) { syncError(error); }
 }
 async function push() {
@@ -188,7 +188,7 @@ async function push() {
     await upload(merged);
     status('online', '☁ Sincronizado');
     message('Últimos cambios guardados.', 'ok');
-    if (changed && element('app').style.display !== 'none') setTimeout(() => location.reload(), 250);
+    if (changed) setTimeout(() => location.reload(), 250);
   } catch (error) {
     localStorage.setItem(DIRTY_KEY, '1');
     syncError(error);
