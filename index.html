@@ -782,16 +782,16 @@
     .tab { padding:12px 14px; scroll-snap-align:start; }
     .mastery-global { padding:10px 16px; }
     .quiz-card { padding:18px 14px; }
-    .card-actions { flex-wrap:wrap; gap:6px; }
+    .card-actions { position:static; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
     .card-actions button { min-height:38px; }
+    .btn-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+    .btn-row .btn { min-width:0; padding:12px 4px; font-size:clamp(12px,3.2vw,15px); letter-spacing:0; line-height:1.1; }
     .user-select-inner { width:100%; padding:20px; }
     .user-buttons { flex-wrap:wrap; gap:10px; }
     .user-btn { flex:1; min-width:125px; padding:16px; }
   }
   @media (max-width:380px) {
     .park-buttons { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .btn-row { gap:5px; }
-    .btn-row .btn { padding:12px 5px; font-size:14px; }
   }
 </style>
 </head>
