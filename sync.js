@@ -10,6 +10,8 @@ const TABLE = 'calles_sync_state';
 const USER_KEY = 'calles_cloud_user_v1';
 const BASE_KEY = 'calles_cloud_base_v1';
 const DIRTY_KEY = 'calles_cloud_dirty_v1';
+const BASE_DB = 'calles_cloud_sync_v1';
+const BASE_STORE = 'baselines';
 const GROUP_KEYS = new Set(['grupoSel_todas', 'grupoSel_no-aprendidas', 'grupoSel_repaso']);
 let session = null;
 let ready = false;
@@ -17,11 +19,54 @@ let updatedAt = '';
 let timer = null;
 let pushing = false;
 let pushAgain = false;
+let baselineCache = null;
 
 const element = id => document.getElementById(id);
 const same = (a, b) => a === b;
 function parse(raw) { try { return JSON.parse(raw); } catch { return null; } }
 function isAppKey(key) { return key.startsWith('quiz_calles_vlc_v2_') || GROUP_KEYS.has(key); }
+function openBaselineDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(BASE_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(BASE_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function readStoredBaseline(userId) {
+  try {
+    const db = await openBaselineDb();
+    const value = await new Promise((resolve, reject) => {
+      const request = db.transaction(BASE_STORE, 'readonly').objectStore(BASE_STORE).get(userId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    if (value) return value;
+  } catch {}
+  try { return parse(localStorage.getItem(BASE_KEY)); }
+  catch { return null; }
+}
+async function storeBaseline(userId, snapshot) {
+  baselineCache = snapshot;
+  try {
+    const db = await openBaselineDb();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(BASE_STORE, 'readwrite');
+      transaction.objectStore(BASE_STORE).put(snapshot, userId);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+    localStorage.removeItem(BASE_KEY);
+  } catch {
+    // La sincronización no debe fallar si el navegador no permite guardar la
+    // copia técnica. Se conserva en memoria durante esta sesión.
+    try { localStorage.setItem(BASE_KEY, JSON.stringify(snapshot)); }
+    catch { try { localStorage.removeItem(BASE_KEY); } catch {} }
+  }
+}
 function capture() {
   const values = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -125,9 +170,14 @@ function prepareLocal() {
   window.migrateUserData('Josep');
   window.migrateUserData('Tudón');
 }
-function baseline() {
+async function baseline() {
   if (localStorage.getItem(USER_KEY) !== session?.user?.id) return null;
-  return parse(localStorage.getItem(BASE_KEY));
+  if (baselineCache) return baselineCache;
+  baselineCache = await readStoredBaseline(session.user.id);
+  // Migra una copia antigua de localStorage antes de aplicar datos remotos,
+  // liberando su espacio para que esos datos sí puedan guardarse.
+  if (baselineCache && localStorage.getItem(BASE_KEY)) await storeBaseline(session.user.id, baselineCache);
+  return baselineCache;
 }
 async function cloudRow() {
   const response = await supabase.from(TABLE).select('payload,updated_at').maybeSingle();
@@ -141,7 +191,7 @@ async function upload(snapshot) {
   if (response.error) throw response.error;
   updatedAt = response.data.updated_at;
   localStorage.setItem(USER_KEY, session.user.id);
-  localStorage.setItem(BASE_KEY, JSON.stringify(snapshot));
+  await storeBaseline(session.user.id, snapshot);
   localStorage.removeItem(DIRTY_KEY);
 }
 function syncError(error) {
@@ -160,13 +210,13 @@ async function initialSync() {
     prepareLocal();
     const local = capture();
     const row = await cloudRow();
-    const merged = row ? reconcile(row.payload, local, baseline()) : local;
+    const merged = row ? reconcile(row.payload, local, await baseline()) : local;
     const changed = apply(merged);
     if (!row || JSON.stringify(merged) !== JSON.stringify(normalize(row.payload))) await upload(merged);
     else {
       updatedAt = row.updated_at || '';
       localStorage.setItem(USER_KEY, session.user.id);
-      localStorage.setItem(BASE_KEY, JSON.stringify(merged));
+      await storeBaseline(session.user.id, merged);
       localStorage.removeItem(DIRTY_KEY);
     }
     ready = true;
@@ -183,7 +233,7 @@ async function push() {
   status('', '☁ Sincronizando…');
   try {
     const row = await cloudRow();
-    const merged = row ? reconcile(row.payload, capture(), baseline()) : capture();
+    const merged = row ? reconcile(row.payload, capture(), await baseline()) : capture();
     const changed = apply(merged);
     await upload(merged);
     status('online', '☁ Sincronizado');
@@ -242,7 +292,7 @@ element('sync-sign-out').addEventListener('click', async () => {
   if (ready && localStorage.getItem(DIRTY_KEY) === '1') await push();
   const result = await supabase.auth.signOut();
   if (result.error) { message(result.error.message, 'error'); return; }
-  session = null; ready = false; authUI();
+  session = null; ready = false; baselineCache = null; authUI();
   message('Sesión cerrada. Los datos locales se conservan.', 'ok');
 });
 document.addEventListener('visibilitychange', () => {
