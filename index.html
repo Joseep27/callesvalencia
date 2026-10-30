@@ -832,6 +832,7 @@
   <div class="tab" data-zone="campanar">Campanar<span class="tab-pct" id="pct-campanar"></span></div>
   <div class="tab" data-zone="saler">Saler<span class="tab-pct" id="pct-saler"></span></div>
   <div class="tab" data-zone="repaso">★ Repaso</div>
+  <div class="tab" data-zone="consolidacion">Consolidación</div>
   <div class="tab" data-zone="plan" id="tab-plan" style="display:none;">🗓 Plan</div>
   <div class="tab" data-zone="stats">📊 Stats</div>
   <div class="tab" data-zone="historial">📝 Historial</div>
@@ -860,6 +861,12 @@
 
   <!-- PROGRESO -->
   <div id="quiz-area">
+    <div id="consolidation-panel" class="plan-card" hidden>
+      <label for="consolidation-target">Objetivo diario: </label>
+      <input id="consolidation-target" type="number" min="50" max="100" step="1" value="50" style="width:75px">
+      <p id="consolidation-status" role="status"></p>
+      <p>Sin repeticiones dentro de cada vuelta. Los fallos siguen en No aprendidas / Repaso. Puedes parar y continuar cuando quieras.</p>
+    </div>
     <div class="plan-review-badge" id="plan-review-badge">🔁 Repaso programado · sin pistas temáticas</div>
     <div class="progress-label" id="progress-label">1 / 10</div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
@@ -2262,7 +2269,7 @@ function reinforceReason(rec) {
 // Devuelve el grupo temático activo SOLO si estamos en Todas/Repaso con un
 // filtro de temática concreto seleccionado (no "todas los grupos").
 function grupoFiltroActivo() {
-  if (!isGlobalQuestionMode(currentZone)) return null;
+  if (!isGlobalQuestionMode(currentZone) || currentZone === 'consolidacion') return null;
   const g = getGrupoSel(currentZone);
   return (g && g !== 'todas') ? g : null;
 }
@@ -2283,7 +2290,7 @@ let persistentAllQueueActive = false;
 let answerMode = 'text';
 let selectedButtonAnswer = { p1: '', p2: '' };
 const PARK_OPTIONS = ['Norte', 'Central', 'Oeste', 'Campanar', 'Saler'];
-function isGlobalQuestionMode(zone) { return ['todas', 'no-aprendidas', 'repaso'].includes(zone); }
+function isGlobalQuestionMode(zone) { return ['todas', 'no-aprendidas', 'repaso', 'consolidacion'].includes(zone); }
 function answerModeKey() { return 'quiz_calles_vlc_v2_ANSWER_MODE_' + CURRENT_USER; }
 function loadAnswerMode() { try { return localStorage.getItem(answerModeKey()) === 'buttons' ? 'buttons' : 'text'; } catch { return 'text'; } }
 function setAnswerMode(mode) {
@@ -2478,7 +2485,7 @@ function populateGrupoSelect(zone = currentZone) {
 }
 function updateGrupoFilterUI(zone) {
   const wrap = document.getElementById('grupo-filter');
-  const applies = isGlobalQuestionMode(zone) && !activePlanReviewGroup;
+  const applies = isGlobalQuestionMode(zone) && zone !== 'consolidacion' && !activePlanReviewGroup;
   wrap.classList.toggle('show', applies);
   if (!applies) return;
   populateGrupoSelect(zone);
@@ -2523,6 +2530,7 @@ function validAnswersForQuestion(e) {
 }
 
 function getFilteredEntries(zone) {
+  if (zone === 'consolidacion') return consolidationEntries();
   if (zone === 'todas' || zone === 'no-aprendidas') {
     let list = [...activeEntries()];
     if (activePlanReviewGroup) return uniqueStreetEntries(list.filter(e => e.grupo === activePlanReviewGroup));
@@ -2600,8 +2608,83 @@ function advancePersistentAllQueue(e) {
   try { localStorage.setItem(allQueueKey(), JSON.stringify(persistentAllQueueState)); } catch {}
 }
 
+// Separate state: never rewrite learning records to build a consolidation round.
+function consolidationKey() { return 'quiz_calles_vlc_v2_CONSOLIDATION_' + CURRENT_USER; }
+function mergeConsolidation(remote, local) {
+  const newer = remote.round > local.round ? remote : local;
+  const days = {};
+  for (const day of new Set([...Object.keys(remote.days || {}), ...Object.keys(local.days || {})])) {
+    days[day] = { ok: Math.max(remote.days?.[day]?.ok || 0, local.days?.[day]?.ok || 0),
+      fail: Math.max(remote.days?.[day]?.fail || 0, local.days?.[day]?.fail || 0) };
+  }
+  if (remote.round !== local.round) return { ...newer, days };
+  const order = [...new Set([...remote.order, ...local.order])];
+  const done = [...new Set([...remote.done, ...local.done])].filter(id => order.includes(id));
+  const skipped = [...new Set([...(remote.skipped || []), ...(local.skipped || [])])]
+    .filter(id => order.includes(id) && !done.includes(id));
+  return { ...local, order, done, skipped, days };
+}
+function loadConsolidation() {
+  const saved = parseJSONStorage(consolidationKey());
+  return saved && saved.version === 1 && Array.isArray(saved.order) && Array.isArray(saved.done)
+    ? saved : { version: 1, round: 0, order: [], done: [], skipped: [], days: {}, target: 50 };
+}
+function saveConsolidation(state) {
+  try { localStorage.setItem(consolidationKey(), JSON.stringify(state)); return true; }
+  catch { alert('No se ha podido guardar Consolidación. Exporta una copia antes de cerrar para conservar el progreso.'); return false; }
+}
+function consolidationEntries() {
+  const entries = uniqueStreetEntries(activeEntries()).filter(e => store[e.calle]?.aprendida);
+  const byId = new Map(entries.map(e => [e.calle, e]));
+  const state = loadConsolidation();
+  const done = new Set(state.done);
+  const skipped = new Set(state.skipped || []);
+  state.order.forEach(id => { if (!done.has(id) && !byId.has(id)) skipped.add(id); });
+  state.skipped = [...skipped];
+  let pending = state.order.filter(id => !done.has(id) && !skipped.has(id));
+  if (!pending.length && entries.length) {
+    state.round++;
+    state.order = shuffle([...byId.keys()]);
+    state.done = []; state.skipped = [];
+    pending = state.order;
+  }
+  saveConsolidation(state);
+  renderConsolidation(state);
+  return pending.map(id => byId.get(id)).filter(Boolean);
+}
+function recordConsolidation(e, correct) {
+  const state = loadConsolidation();
+  if (!state.order.includes(e.calle) || state.done.includes(e.calle)) return;
+  state.done.push(e.calle);
+  const day = todayISO();
+  state.days ||= {};
+  state.days[day] ||= { ok: 0, fail: 0 };
+  state.days[day][correct ? 'ok' : 'fail']++;
+  saveConsolidation(state);
+  renderConsolidation(state);
+}
+function renderConsolidation(state = loadConsolidation()) {
+  const day = state.days?.[todayISO()] || { ok: 0, fail: 0 };
+  const skipped = (state.skipped || []).length;
+  document.getElementById('consolidation-target').value = state.target;
+  document.getElementById('consolidation-status').textContent =
+    'Vuelta ' + state.round + ' · ' + state.done.length + '/' + state.order.length +
+    ' respondidas · ' + (state.order.length - state.done.length - skipped) + ' pendientes' +
+    (skipped ? ' · ' + skipped + ' retiradas de esta vuelta' : '') +
+    ' · Hoy: ' + (day.ok + day.fail) + '/' + state.target + ' (' + day.ok + ' aciertos, ' + day.fail + ' fallos)' +
+    (day.ok + day.fail >= state.target ? ' · Objetivo cumplido; puedes continuar.' : '');
+}
+document.getElementById('consolidation-target').addEventListener('input', ev => {
+  if (!ev.target.validity.valid) return;
+  const state = loadConsolidation();
+  state.target = Math.max(50, Math.min(100, Math.round(Number(ev.target.value) || 50)));
+  saveConsolidation(state); renderConsolidation(state);
+});
+
 function startQuiz(zone) {
   currentZone = zone;
+  document.getElementById('consolidation-panel').hidden = zone !== 'consolidacion';
+  document.getElementById('btn-restart').textContent = zone === 'consolidacion' ? 'Continuar vuelta' : 'Volver a empezar';
   updateGrupoFilterUI(zone);
   renderBelowQuiz();
   renderMastery();
@@ -2615,7 +2698,7 @@ function startQuiz(zone) {
     const grupoSel = getGrupoSel(zone);
     const grupoTxt = isGlobalQuestionMode(zone) && grupoSel !== 'todas'
       ? ` del grupo «${grupoSel}»` : '';
-    const msg = zone === 'no-aprendidas' ? 'Ya has aprendido todas las calles de este grupo.' : zone === 'repaso'
+    const msg = zone === 'consolidacion' ? 'No hay calles aprendidas disponibles. Recupéralas en No aprendidas / Repaso.' : zone === 'no-aprendidas' ? 'Ya has aprendido todas las calles de este grupo.' : zone === 'repaso'
       ? (grupoTxt
           ? `No hay calles falladas${grupoTxt} (aún).<br>¡Sigue practicando ese grupo!`
           : 'No hay calles falladas aún.<br>Practica primero en otra pestaña.')
@@ -2630,7 +2713,7 @@ function startQuiz(zone) {
     return;
   }
   document.getElementById('empty-state-card').style.display = 'none';
-  queue = persistentAllQueueActive ? persistentAllEntries(entries) : shuffle(entries);
+  queue = zone === 'consolidacion' ? entries : persistentAllQueueActive ? persistentAllEntries(entries) : shuffle(entries);
   qIndex = 0;
   answered = false;
   sessionOk = 0;
@@ -2647,6 +2730,16 @@ function updateNoteFlag() {
 }
 
 function renderQuestion() {
+  if (currentZone === 'consolidacion') {
+    const state = loadConsolidation();
+    const skipped = new Set(state.skipped || []);
+    while (qIndex < queue.length && (!store[queue[qIndex].calle]?.aprendida || state.done.includes(queue[qIndex].calle) || skipped.has(queue[qIndex].calle))) {
+      if (!state.done.includes(queue[qIndex].calle)) skipped.add(queue[qIndex].calle);
+      qIndex++;
+    }
+    state.skipped = [...skipped];
+    saveConsolidation(state); renderConsolidation(state);
+  }
   if (qIndex >= queue.length) { showCompleted(); return; }
   const e = queue[qIndex];
   answered = false;
@@ -2658,7 +2751,7 @@ function renderQuestion() {
   card.className = 'quiz-card ' + (hideColor ? 'zone-hidden' : 'zone-' + e.zone.toLowerCase());
 
   document.getElementById('calle-nombre').innerHTML = e.calle + (e.modified ? '<span class="mod-badge">modificada</span>' : '');
-  const hideTheme = currentZone === 'todas' || currentZone === 'no-aprendidas' || activePlanReviewGroup || e.grupo === 'Calles del Saler';
+  const hideTheme = currentZone === 'consolidacion' || currentZone === 'todas' || currentZone === 'no-aprendidas' || activePlanReviewGroup || e.grupo === 'Calles del Saler';
   document.getElementById('calle-grupo').textContent = hideTheme ? '' : e.grupo;
   const multiWarning = document.getElementById('multi-answer-warning');
   multiWarning.textContent = '';
@@ -2702,7 +2795,8 @@ function renderQuestion() {
   updateAnswerModeUI();
 
   document.getElementById('progress-label').textContent = (qIndex + 1) + ' / ' + queue.length;
-  document.getElementById('btn-back').disabled = qIndex === 0;
+  document.getElementById('btn-back').disabled = qIndex === 0 || currentZone === 'consolidacion';
+  document.getElementById('btn-next').disabled = currentZone === 'consolidacion';
   document.getElementById('progress-fill').style.width = ((qIndex / queue.length) * 100) + '%';
   document.getElementById('btn-check').textContent = 'Comprobar';
   document.getElementById('btn-check').disabled = false;
@@ -2772,7 +2866,7 @@ function checkAnswer() {
     rec.pendingFailEntry = entryVariantId(e);
     sessionFail++;
     showFeedback(false, e);
-    if (currentZone !== 'todas') {
+    if (currentZone !== 'todas' && currentZone !== 'consolidacion') {
       const distance = 3 + Math.floor(Math.random() * 2);
       const insertAt = Math.min(queue.length, qIndex + distance + 1);
       queue.splice(insertAt, 0, e);
@@ -2787,7 +2881,9 @@ function checkAnswer() {
   if (correct && !rec.manual) rec.aprendida = rec.streak >= 5;
 
   saveRecord(e.calle, rec);
+  if (currentZone === 'consolidacion') recordConsolidation(e, correct);
   answered = true;
+  document.getElementById('btn-next').disabled = false;
   document.getElementById('btn-check').textContent = 'Siguiente →';
   updateAprendidaBtn(rec);
   updateHeaderStats();
@@ -2836,6 +2932,7 @@ function showFeedback(ok, e) {
 }
 
 function nextQuestion() {
+  if (currentZone === 'consolidacion' && !answered) return;
   // save nota before moving
   if (qIndex < queue.length) {
     const e = queue[qIndex];
@@ -3258,6 +3355,7 @@ function importFullBackupText(text) {
     let merged = incoming;
     if (current && typeof current === 'object' && incoming && typeof incoming === 'object') {
       if (/(_PROGRESS_|^quiz_calles_vlc_v\d+_(Josep|Tudón)$)/.test(key)) merged = mergeProgress(current, incoming);
+      else if (/_CONSOLIDATION_/.test(key)) merged = mergeConsolidation(incoming, current);
       else if (/_PLAN_|_STREET_PLAN_/.test(key)) merged = mergePlan(current, incoming);
       else if (!Array.isArray(current) && !Array.isArray(incoming)) merged = { ...incoming, ...current };
       else if (Array.isArray(current) && Array.isArray(incoming)) merged = [...current, ...incoming];
@@ -3459,6 +3557,7 @@ document.getElementById('btn-check').addEventListener('click', () => {
 });
 
 document.getElementById('btn-back').addEventListener('click', () => {
+  if (currentZone === 'consolidacion') return;
   if (qIndex === 0) return;
   // save nota of current before going back
   if (qIndex < queue.length) {
@@ -3474,6 +3573,7 @@ document.getElementById('btn-back').addEventListener('click', () => {
 });
 
 document.getElementById('btn-next').addEventListener('click', () => {
+  if (currentZone === 'consolidacion' && !answered) return;
   if (!answered) {
     // skip: count as no answer, just advance
     const e = queue[qIndex];

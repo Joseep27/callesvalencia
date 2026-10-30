@@ -92,6 +92,8 @@ function mergeConflict(key, remoteRaw, localRaw, baseRaw) {
   if (localRaw == null) return remoteRaw;
   if (same(remoteRaw, localRaw)) return localRaw;
   const remote = parse(remoteRaw), local = parse(localRaw);
+  if (/^quiz_calles_vlc_v2_CONSOLIDATION_/.test(key) && remote?.version === 1 && local?.version === 1)
+    return JSON.stringify(window.mergeConsolidation(remote, local));
   if (key === 'quiz_calles_vlc_v2_DELETED') return JSON.stringify(mergeArray(remote, local));
   if (key === 'quiz_calles_vlc_v2_HISTORIAL') return JSON.stringify(mergeArray(remote, local));
   if (/^quiz_calles_vlc_v2_(Josep|Tudón)$/.test(key) && remote && local) {
