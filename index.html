@@ -604,7 +604,7 @@
   }
   .parque-select:focus { outline: none; border-color: var(--muted); }
   .parque-select::placeholder { color: var(--muted); font-size: 14px; font-weight: 400; }
-  .answer-mode-switch { display:flex; justify-content:center; gap:8px; margin:0 0 14px; }
+  .answer-mode-switch { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:0 0 14px; }
   .answer-mode-btn { border:1px solid var(--border); background:var(--surface2); color:var(--muted); border-radius:999px; padding:6px 14px; cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase; }
   .answer-mode-btn.active { border-color:var(--text); background:var(--text); color:var(--bg); }
   .answer-buttons { display:none; }
@@ -935,6 +935,8 @@
         <div class="answer-mode-switch" id="answer-mode-switch">
           <button type="button" class="answer-mode-btn" data-answer-mode="text">Escribir</button>
           <button type="button" class="answer-mode-btn" data-answer-mode="buttons">Botones</button>
+          <button type="button" class="answer-mode-btn" data-exit-count="1">1 salida</button>
+          <button type="button" class="answer-mode-btn" data-exit-count="2">2 salidas</button>
         </div>
         <div id="respuesta-escrita">
           <div class="respuesta-row" id="respuesta-row">
@@ -2288,6 +2290,7 @@ let activePlanReviewGroup = null;
 let persistentAllQueueState = null;
 let persistentAllQueueActive = false;
 let answerMode = 'text';
+let exitCount = 2;
 let selectedButtonAnswer = { p1: '', p2: '' };
 const PARK_OPTIONS = ['Norte', 'Central', 'Oeste', 'Campanar', 'Saler'];
 function isGlobalQuestionMode(zone) { return ['todas', 'no-aprendidas', 'repaso', 'consolidacion'].includes(zone); }
@@ -2296,6 +2299,13 @@ function loadAnswerMode() { try { return localStorage.getItem(answerModeKey()) =
 function setAnswerMode(mode) {
   answerMode = mode === 'buttons' ? 'buttons' : 'text';
   try { localStorage.setItem(answerModeKey(), answerMode); } catch {}
+  updateAnswerModeUI();
+}
+function exitCountKey() { return 'quiz_calles_vlc_v2_EXIT_COUNT_' + CURRENT_USER; }
+function loadExitCount() { try { return localStorage.getItem(exitCountKey()) === '1' ? 1 : 2; } catch { return 2; } }
+function setExitCount(count) {
+  exitCount = Number(count) === 1 ? 1 : 2;
+  try { localStorage.setItem(exitCountKey(), String(exitCount)); } catch {}
   updateAnswerModeUI();
 }
 function renderParkButtons() {
@@ -2311,7 +2321,21 @@ function updateAnswerModeUI() {
   text.style.display = answerMode === 'text' ? '' : 'none';
   buttons.style.display = answerMode === 'buttons' ? 'block' : 'none';
   document.querySelectorAll('[data-answer-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.answerMode === answerMode));
-  document.getElementById('button-group-p1').style.display = isGlobalQuestionMode(currentZone) ? 'block' : 'none';
+  document.querySelectorAll('[data-exit-count]').forEach(btn => {
+    const active = Number(btn.dataset.exitCount) === exitCount;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+  const showFirst = exitCount === 1 || isGlobalQuestionMode(currentZone);
+  const showSupport = exitCount === 2;
+  document.getElementById('sel-primero').parentElement.style.display = showFirst ? 'block' : 'none';
+  document.getElementById('grupo-apoyo').style.display = showSupport ? 'block' : 'none';
+  document.getElementById('respuesta-row').className = 'respuesta-row' + (showFirst && showSupport ? '' : ' single');
+  document.getElementById('button-group-p1').style.display = showFirst ? 'block' : 'none';
+  document.getElementById('button-group-p2').style.display = showSupport ? 'block' : 'none';
+  const entry = queue[qIndex];
+  if (entry) document.getElementById('quiz-card').className = 'quiz-card ' +
+    (exitCount === 1 || isGlobalQuestionMode(currentZone) ? 'zone-hidden' : 'zone-' + entry.zone.toLowerCase());
   document.getElementById('button-label-p2').textContent = 'Parque de Apoyo';
 }
 
@@ -2817,7 +2841,16 @@ function checkAnswer() {
   const p1 = answerMode === 'buttons' ? selectedButtonAnswer.p1 : selP.value.trim();
   const p2 = answerMode === 'buttons' ? selectedButtonAnswer.p2 : selA.value.trim();
 
-  if (isZoneMode) {
+  if (exitCount === 1) {
+    if (!p1) {
+      if (answerMode === 'buttons') document.getElementById('button-group-p1').classList.add('missing');
+      else selP.style.borderColor = 'var(--wrong)';
+      return;
+    }
+    correct = real.some(s => s[0].toLowerCase() === p1.toLowerCase());
+    respuestaConcreta = p1;
+    if (answerMode === 'text') selP.className = 'parque-select ' + (correct ? 'correct' : 'wrong');
+  } else if (isZoneMode) {
     if (!p2) {
       if (answerMode === 'buttons') document.getElementById('button-group-p2').classList.add('missing');
       else selA.style.borderColor = 'var(--wrong)';
@@ -2845,7 +2878,9 @@ function checkAnswer() {
     }
   }
   if (answerMode === 'buttons') {
-    document.querySelectorAll('.park-answer-btn.selected').forEach(btn => btn.classList.add(correct ? 'correct' : 'wrong'));
+    document.querySelectorAll('.park-answer-btn.selected').forEach(btn => {
+      if (exitCount === 2 || btn.dataset.slot === 'p1') btn.classList.add(correct ? 'correct' : 'wrong');
+    });
   }
 
   rec.nota = document.getElementById('nota-textarea').value;
@@ -2900,7 +2935,9 @@ function showFeedback(ok, e) {
   if (!ok) {
 
     let combos;
-    if (isZoneMode) {
+    if (exitCount === 1) {
+      combos = [...new Set(real.map(s => s[0]))].join(' / ');
+    } else if (isZoneMode) {
       // Ya sabemos el 1º parque (es esta pestaña): mostramos solo el 2º
       const segundos = [...new Set(real.map(s => s[1]))];
       combos = segundos.join(' / ');
@@ -2925,7 +2962,9 @@ function showFeedback(ok, e) {
     }
   } else if (!isZoneMode && real.length > 1) {
     document.getElementById('feedback-answer').textContent =
-      '✓ Respuestas válidas: ' + real.map(s => `${s[0]} → ${s[1]}`).join(' / ');
+      '✓ Respuestas válidas: ' + (exitCount === 1
+        ? [...new Set(real.map(s => s[0]))].join(' / ')
+        : real.map(s => `${s[0]} → ${s[1]}`).join(' / '));
   } else {
     document.getElementById('feedback-answer').textContent = '';
   }
@@ -3467,8 +3506,11 @@ document.getElementById('mod-answers-list').addEventListener('click', ev => {
   if (rows.length > 1) btn.closest('.mod-answer-row').remove();
 });
 document.getElementById('answer-mode-switch').addEventListener('click', ev => {
-  const btn = ev.target.closest('[data-answer-mode]'); if (!btn || answered) return;
-  setAnswerMode(btn.dataset.answerMode);
+  if (answered) return;
+  const countBtn = ev.target.closest('[data-exit-count]');
+  if (countBtn) { setExitCount(countBtn.dataset.exitCount); return; }
+  const btn = ev.target.closest('[data-answer-mode]');
+  if (btn) setAnswerMode(btn.dataset.answerMode);
 });
 document.getElementById('respuesta-botones').addEventListener('click', ev => {
   const btn = ev.target.closest('.park-answer-btn'); if (!btn || answered) return;
@@ -3681,6 +3723,7 @@ function enterApp(user) {
   CURRENT_USER = user;
   store = migrateUserData(user);
   answerMode = loadAnswerMode();
+  exitCount = loadExitCount();
   renderParkButtons();
   document.getElementById('user-select-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -3738,3 +3781,4 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 </script>
 </body>
 </html>
+
